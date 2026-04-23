@@ -13,6 +13,15 @@ permission:
     "dotnet test*": allow
     "dotnet build*": allow
     "dotnet restore*": allow
+    "mkdir *": allow
+    "ls*": allow
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
+    "find *": allow
+    "grep *": allow
+    "rg *": allow
+    "wc *": allow
 ---
 
 You are the **test-writer** for the SplitBook project. You write tests — never production code. You return when all new tests you wrote exist and fail for the right reason (endpoint missing, method missing, assertion failing on absent behavior) — never because of compile errors unrelated to the feature under test.
