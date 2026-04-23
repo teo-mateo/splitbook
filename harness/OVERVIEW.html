@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SplitBook Harness — Overview</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #7cc2ff;
+    --primary: #ffd166;
+    --human: #ef476f;
+    --read: #9aa3b2;
+    --test: #7cc2ff;
+    --impl: #06d6a0;
+    --research: #c084fc;
+    --mem: #f59f00;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 24px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55; font-size: 15px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 32px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; letter-spacing: -0.01em;
+       border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  p { color: var(--text); margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--accent);
+         background: var(--panel-2); padding: 1px 5px; border-radius: 3px; }
+  .grid { display: grid; gap: 12px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px;
+  }
+  .card h3 { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .card .role { color: var(--muted); font-size: 12px; font-family: var(--mono);
+                text-transform: uppercase; letter-spacing: 0.04em; }
+  .card p { font-size: 13.5px; margin: 8px 0 0; color: var(--muted); }
+  .card .tools { margin-top: 10px; font-family: var(--mono); font-size: 12px; }
+  .tools .can { color: var(--impl); } .tools .cant { color: #ef476f; }
+  .pillars { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+  .pillar { background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px; border-left: 3px solid var(--accent); }
+  .pillar h3 { font-size: 14px; color: var(--accent); letter-spacing: 0.02em; }
+  .pillar p { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .diagram { background: var(--panel); border: 1px solid var(--border);
+             border-radius: 8px; padding: 24px; overflow-x: auto; }
+  svg { display: block; margin: 0 auto; }
+  svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: var(--text); }
+  svg .mono { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+  svg .label { font-size: 13px; font-weight: 600; }
+  svg .small { font-size: 11px; fill: var(--muted); }
+  svg .flow { stroke: var(--border); stroke-width: 1.5; fill: none; }
+  svg .flow-accent { stroke: var(--accent); stroke-width: 1.5; fill: none;
+                     stroke-dasharray: 5 4; }
+  svg .node { stroke-width: 1.5; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 48px;
+           padding-top: 16px; border-top: 1px solid var(--border); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 16px 0;
+            font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>SplitBook Harness</h1>
+<p class="sub">An AI-coding harness driving a local open-weight thinking model (Qwen3.6-27B) to build a medium-sized .NET REST API — reliably.</p>
+
+<h2>What's going on</h2>
+<p>A local model — served by our own vLLM endpoint — is writing a real C#/.NET application end-to-end. The app is a byproduct. The real output is <em>the harness</em>: the set of subagent roles, scoped tools, curated memory, and per-slice protocol that makes a small thinking model deliver correct code without spiraling.</p>
+<p>Runtime is <code>opencode</code> — an open-source, Claude-Code-style CLI that lets us define custom subagents in markdown with their own prompts and tool permissions.</p>
+
+<h2>The cast</h2>
+<div class="legend">
+  <span><span class="dot" style="background:var(--human)"></span>human</span>
+  <span><span class="dot" style="background:var(--primary)"></span>primary (builder)</span>
+  <span><span class="dot" style="background:var(--read)"></span>read-only</span>
+  <span><span class="dot" style="background:var(--test)"></span>writes tests</span>
+  <span><span class="dot" style="background:var(--research)"></span>web research</span>
+  <span><span class="dot" style="background:var(--mem)"></span>memory curator</span>
+</div>
+<div class="diagram">
+<svg viewBox="0 0 980 380" width="100%" style="max-width: 980px">
+  <!-- Human -->
+  <rect x="410" y="20" width="160" height="46" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--human)"/>
+  <text x="490" y="40" text-anchor="middle" class="label" fill="var(--human)">human</text>
+  <text x="490" y="58" text-anchor="middle" class="small">meta-reviewer · between slices</text>
+
+  <!-- Primary -->
+  <rect x="360" y="120" width="260" height="64" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--primary)" stroke-width="2"/>
+  <text x="490" y="145" text-anchor="middle" class="label" fill="var(--primary)">primary</text>
+  <text x="490" y="165" text-anchor="middle" class="small">builder · writes the production code</text>
+  <text x="490" y="179" text-anchor="middle" class="small">reads specs, DECISIONS, LESSONS every slice</text>
+
+  <!-- Arrow human → primary -->
+  <path d="M490,68 L490,118" class="flow"/>
+  <polygon points="486,112 494,112 490,120" fill="var(--border)"/>
+
+  <!-- Subagents row -->
+  <!-- spec-auditor -->
+  <rect x="20" y="240" width="160" height="70" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--read)"/>
+  <text x="100" y="262" text-anchor="middle" class="label" fill="var(--read)">spec-auditor</text>
+  <text x="100" y="280" text-anchor="middle" class="small">acceptance criteria</text>
+  <text x="100" y="294" text-anchor="middle" class="small">read-only · plan mode</text>
+
+  <!-- test-writer -->
+  <rect x="200" y="240" width="160" height="70" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--test)"/>
+  <text x="280" y="262" text-anchor="middle" class="label" fill="var(--test)">test-writer</text>
+  <text x="280" y="280" text-anchor="middle" class="small">failing tests only</text>
+  <text x="280" y="294" text-anchor="middle" class="small">verifies RED via dotnet test</text>
+
+  <!-- researcher -->
+  <rect x="380" y="240" width="160" height="70" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--research)" stroke-dasharray="5 4"/>
+  <text x="460" y="262" text-anchor="middle" class="label" fill="var(--research)">@researcher</text>
+  <text x="460" y="280" text-anchor="middle" class="small">webfetch · websearch</text>
+  <text x="460" y="294" text-anchor="middle" class="small">on demand · any agent</text>
+
+  <!-- reviewer -->
+  <rect x="560" y="240" width="160" height="70" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--read)"/>
+  <text x="640" y="262" text-anchor="middle" class="label" fill="var(--read)">reviewer</text>
+  <text x="640" y="280" text-anchor="middle" class="small">diff vs spec + lessons</text>
+  <text x="640" y="294" text-anchor="middle" class="small">pass / findings (≤3 rounds)</text>
+
+  <!-- lessons-scribe -->
+  <rect x="740" y="240" width="160" height="70" rx="8" class="node"
+        fill="var(--panel-2)" stroke="var(--mem)"/>
+  <text x="820" y="262" text-anchor="middle" class="label" fill="var(--mem)">lessons-scribe</text>
+  <text x="820" y="280" text-anchor="middle" class="small">LESSONS.md only</text>
+  <text x="820" y="294" text-anchor="middle" class="small">≤3 lessons per slice</text>
+
+  <!-- primary → subagents -->
+  <path d="M400,184 C380,210 200,220 100,238" class="flow"/>
+  <polygon points="98,233 108,238 100,243" fill="var(--border)"/>
+  <path d="M430,184 C410,210 300,220 280,238" class="flow"/>
+  <polygon points="278,233 288,238 280,243" fill="var(--border)"/>
+  <path d="M490,184 L465,238" class="flow-accent"/>
+  <polygon points="462,233 474,238 466,243" fill="var(--research)"/>
+  <path d="M550,184 C570,210 620,220 640,238" class="flow"/>
+  <polygon points="637,233 647,238 640,243" fill="var(--border)"/>
+  <path d="M580,184 C600,210 760,220 820,238" class="flow"/>
+  <polygon points="818,233 828,238 820,243" fill="var(--border)"/>
+
+  <!-- Researcher usable by all -->
+  <text x="460" y="335" text-anchor="middle" class="mono">
+    any agent can call @researcher
+  </text>
+</svg>
+</div>
+
+<h3 style="margin-top:18px;color:var(--muted);font-size:13px;font-weight:500">Who writes what</h3>
+<div class="grid cards">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--primary)"></span>primary</h3>
+    <div class="role">builder</div>
+    <p>Implements the slice. Writes production code. Orchestrates the loop. Invokes subagents by name (<code>@spec-auditor</code>, <code>@test-writer</code>, etc.).</p>
+    <p class="tools"><span class="can">✓</span> everything</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--read)"></span>spec-auditor</h3>
+    <div class="role">read-only</div>
+    <p>Turns the slice's spec into a flat checklist of acceptance criteria. Flags ambiguities. Never designs.</p>
+    <p class="tools"><span class="can">✓</span> read, grep &nbsp; <span class="cant">✗</span> write, bash</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--test)"></span>test-writer</h3>
+    <div class="role">tests only</div>
+    <p>Given the checklist, writes failing xUnit tests. Runs <code>dotnet test</code> and confirms red before returning. Never writes production code.</p>
+    <p class="tools"><span class="can">✓</span> write (tests), dotnet &nbsp; <span class="cant">✗</span> edit src/</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--research)"></span>researcher</h3>
+    <div class="role">on-demand</div>
+    <p>When any agent is uncertain about a library API or framework behavior, it delegates here. Returns a distilled answer + one code example + source URLs in ~300 tokens. Keeps caller's context lean.</p>
+    <p class="tools"><span class="can">✓</span> read, webfetch, websearch &nbsp; <span class="cant">✗</span> write, bash</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--read)"></span>reviewer</h3>
+    <div class="role">audit</div>
+    <p>Audits the slice's diff. Runs tests. Verifies each acceptance criterion has a passing test. Emits a structured <code>{status, findings[]}</code> report. Up to 3 rounds per slice.</p>
+    <p class="tools"><span class="can">✓</span> read, git, dotnet &nbsp; <span class="cant">✗</span> write, edit</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--mem)"></span>lessons-scribe</h3>
+    <div class="role">curator</div>
+    <p>End of slice: distills ≤3 new lessons into <code>LESSONS.md</code>. Enforces a 20-entry cap by pruning stale ones. Cannot touch any other file.</p>
+    <p class="tools"><span class="can">✓</span> edit LESSONS.md &nbsp; <span class="cant">✗</span> anything else</p>
+  </div>
+</div>
+
+<h2>Per-slice loop</h2>
+<div class="diagram">
+<svg viewBox="0 0 700 720" width="100%" style="max-width: 700px">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,10 L10,5 z" fill="var(--muted)"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,10 L10,5 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <!-- Start: human -->
+  <rect x="250" y="10" width="200" height="38" rx="6" fill="var(--panel-2)" stroke="var(--human)" stroke-width="1.5"/>
+  <text x="350" y="34" text-anchor="middle" class="label" fill="var(--human)">human: /next-slice</text>
+
+  <!-- Read specs -->
+  <rect x="230" y="80" width="240" height="42" rx="6" fill="var(--panel-2)" stroke="var(--primary)" stroke-width="1.5"/>
+  <text x="350" y="100" text-anchor="middle" class="label" fill="var(--primary)">primary reads</text>
+  <text x="350" y="116" text-anchor="middle" class="small">specs · DECISIONS · LESSONS</text>
+
+  <!-- spec-auditor -->
+  <rect x="230" y="152" width="240" height="42" rx="6" fill="var(--panel-2)" stroke="var(--read)" stroke-width="1.5"/>
+  <text x="350" y="172" text-anchor="middle" class="label" fill="var(--read)">@spec-auditor</text>
+  <text x="350" y="187" text-anchor="middle" class="small">returns acceptance criteria</text>
+
+  <!-- scaffolding -->
+  <rect x="195" y="222" width="310" height="42" rx="6" fill="var(--panel-2)" stroke="var(--primary)" stroke-width="1.5"/>
+  <text x="350" y="242" text-anchor="middle" class="label" fill="var(--primary)">primary: scaffolding only</text>
+  <text x="350" y="258" text-anchor="middle" class="small">csproj · DI wiring · empty placeholder types</text>
+
+  <!-- test-writer -->
+  <rect x="195" y="292" width="310" height="48" rx="6" fill="var(--panel-2)" stroke="var(--test)" stroke-width="1.5"/>
+  <text x="350" y="312" text-anchor="middle" class="label" fill="var(--test)">@test-writer</text>
+  <text x="350" y="328" text-anchor="middle" class="small">writes failing tests · runs dotnet test · confirms RED</text>
+
+  <!-- primary implements -->
+  <rect x="195" y="368" width="310" height="48" rx="6" fill="var(--panel-2)" stroke="var(--impl)" stroke-width="1.5"/>
+  <text x="350" y="388" text-anchor="middle" class="label" fill="var(--impl)">primary: implement until GREEN</text>
+  <text x="350" y="404" text-anchor="middle" class="small">real handler bodies · iterate via dotnet test</text>
+
+  <!-- reviewer -->
+  <rect x="195" y="444" width="310" height="48" rx="6" fill="var(--panel-2)" stroke="var(--read)" stroke-width="1.5"/>
+  <text x="350" y="464" text-anchor="middle" class="label" fill="var(--read)">@reviewer (up to 3 rounds)</text>
+  <text x="350" y="480" text-anchor="middle" class="small">returns {status: pass | fail, findings[]}</text>
+
+  <!-- lessons-scribe -->
+  <rect x="230" y="520" width="240" height="42" rx="6" fill="var(--panel-2)" stroke="var(--mem)" stroke-width="1.5"/>
+  <text x="350" y="540" text-anchor="middle" class="label" fill="var(--mem)">@lessons-scribe</text>
+  <text x="350" y="556" text-anchor="middle" class="small">appends ≤3 lessons to LESSONS.md</text>
+
+  <!-- slice log -->
+  <rect x="230" y="590" width="240" height="42" rx="6" fill="var(--panel-2)" stroke="var(--primary)" stroke-width="1.5"/>
+  <text x="350" y="610" text-anchor="middle" class="label" fill="var(--primary)">primary writes slice-NN.md</text>
+  <text x="350" y="626" text-anchor="middle" class="small">session log for the human</text>
+
+  <!-- human review -->
+  <rect x="250" y="660" width="200" height="42" rx="6" fill="var(--panel-2)" stroke="var(--human)" stroke-width="1.5"/>
+  <text x="350" y="680" text-anchor="middle" class="label" fill="var(--human)">human: review + commit</text>
+  <text x="350" y="696" text-anchor="middle" class="small">decides next slice or adjust</text>
+
+  <!-- Flow arrows -->
+  <path d="M350,48 L350,78" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,122 L350,150" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,194 L350,220" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,264 L350,290" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,340 L350,366" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,416 L350,442" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,492 L350,518" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,562 L350,588" class="flow" marker-end="url(#arrow)"/>
+  <path d="M350,632 L350,658" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Fix loop from reviewer back to primary -->
+  <path d="M195,468 C 100,468 100,392 195,392" class="flow-accent" marker-end="url(#arrow-accent)"/>
+  <text x="65" y="430" text-anchor="middle" class="mono" fill="var(--accent)">if `fail`</text>
+  <text x="65" y="443" text-anchor="middle" class="mono" fill="var(--accent)">primary fixes</text>
+
+  <!-- Researcher side node -->
+  <rect x="540" y="340" width="150" height="88" rx="8" fill="var(--panel-2)" stroke="var(--research)" stroke-dasharray="5 4"/>
+  <text x="615" y="363" text-anchor="middle" class="label" fill="var(--research)">@researcher</text>
+  <text x="615" y="382" text-anchor="middle" class="small">invoked on demand</text>
+  <text x="615" y="396" text-anchor="middle" class="small">by any agent</text>
+  <text x="615" y="418" text-anchor="middle" class="small">unsure about an API?</text>
+
+  <!-- dashed lines from relevant phases to researcher -->
+  <path d="M505,315 L540,370" class="flow-accent"/>
+  <path d="M505,390 L540,390" class="flow-accent"/>
+  <path d="M505,465 L540,405" class="flow-accent"/>
+</svg>
+</div>
+
+<h2>Design choices that matter</h2>
+<p>These are the non-obvious decisions found the hard way through failure.</p>
+
+<div class="grid pillars">
+  <div class="pillar">
+    <h3>Scaffolding before tests, bodies after</h3>
+    <p>The primary may write <code>.csproj</code>, DI wiring, and empty placeholder types before <code>@test-writer</code> runs — but <em>no method bodies, no logic</em>. Real bodies only after tests exist and are red. Prevents tests-written-to-match-existing-code — the #1 small-model TDD failure mode.</p>
+  </div>
+  <div class="pillar">
+    <h3>Curated lessons, not append-only log</h3>
+    <p><code>LESSONS.md</code> is capped at ~20 entries. The scribe adds ≤3 per slice and prunes stale ones. Unbounded logs poison the context and get ignored. <code>[HUMAN]</code>-prefixed entries are sacred and take priority.</p>
+  </div>
+  <div class="pillar">
+    <h3>Research as a subagent, not inline</h3>
+    <p>When the primary is uncertain about a library API, it calls <code>@researcher</code>, which returns ~300 distilled tokens. An inline <code>webfetch</code> would pull 10K tokens of HTML into the primary's conversation and bloat every subsequent turn.</p>
+  </div>
+  <div class="pillar">
+    <h3>Anti-deliberation protocols</h3>
+    <p>Thinking models spiral. Subagent prompts include hard rules: <em>"if you wrote 'OK let me write now', your NEXT action is a write tool call — not more reasoning"</em>. Fixed thinking budgets. Decide-once rules. No re-validating the same classification.</p>
+  </div>
+  <div class="pillar">
+    <h3>One endpoint per slice</h3>
+    <p>Bigger slices mean bigger batches, more deliberation, and bigger blast radius on failure. Current plan has 17 slices, each 1–2 endpoints. Smaller = more commit-worthy checkpoints, faster recovery.</p>
+  </div>
+  <div class="pillar">
+    <h3>Output budget matters for thinking models</h3>
+    <p>vLLM <code>max_tokens</code> must be ≥32K. Qwen3's <code>&lt;think&gt;</code> blocks routinely consume 10K–20K tokens <em>before the first tool call</em>. A low ceiling → subagent returns empty, harness protocol breaks silently.</p>
+  </div>
+</div>
+
+<h2>What we're actually measuring</h2>
+<p>The app is a byproduct. Real outputs:</p>
+<ul>
+  <li><strong>A reproducible harness</strong> — prompts, agent definitions, lessons — a fresh operator can rerun.</li>
+  <li><strong>A predictive <code>LESSONS.md</code></strong> — lessons that prevent <em>future</em> failures, not just describe the last one.</li>
+  <li><strong>Data on where this model class breaks</strong> — which slice types, how many reviewer rounds, whether lessons reduce future failures, token cost per slice.</li>
+</ul>
+
+<footer>
+  Runtime: opencode (SST) · Model: Qwen3.6-27B-FP8 on local vLLM · Stack: .NET 8, minimal APIs, EF Core, xUnit, TDD, vertical slice architecture
+</footer>
+
+</div>
+</body>
+</html>

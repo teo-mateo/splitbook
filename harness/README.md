@@ -21,6 +21,7 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
 | `test-writer` | subagent | Given the checklist from `spec-auditor`, writes the xUnit integration + unit tests for the slice. Does NOT write production code. Runs `dotnet test` and confirms **all new tests fail** (pure red) before returning | read, write, bash (scoped to `dotnet test`) |
 | `reviewer` | subagent (plan mode — read-only) | After primary reports green: reads the diff, the specs, and LESSONS.md. Emits a structured report (`pass` / `findings[]`). Each finding has severity, file:line, and a one-line fix hint | read, grep, bash (scoped to `git diff`, `dotnet test`) |
 | `lessons-scribe` | subagent | End of slice: reads the reviewer report and the session transcript, distills ≤3 new lessons, merges into LESSONS.md respecting the cap. Deletes lessons that newer ones supersede | read, write (LESSONS.md only) |
+| `researcher` | subagent (read-only + web) | On demand: invoked by ANY other agent (primary, test-writer, reviewer) with a focused library/API/pattern question. Looks it up via webfetch/websearch/Context7 and returns a distilled answer + one example + sources. Keeps the caller's main context clean. | read, webfetch, websearch |
 
 ## 2. Per-slice loop
 

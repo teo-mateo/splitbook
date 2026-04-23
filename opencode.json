@@ -35,11 +35,12 @@
   "permission": {
     "edit": "allow",
     "task": {
+      "*": "ask",
       "spec-auditor": "allow",
       "test-writer": "allow",
       "reviewer": "allow",
       "lessons-scribe": "allow",
-      "*": "ask"
+      "researcher": "allow"
     },
     "bash": {
       "dotnet *": "allow",

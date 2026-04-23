@@ -28,3 +28,9 @@ Reconsider splitting `Domain/` into its own class library at **slice 6** (Balanc
 Until that slice lands, `SplitBook.Domain.Tests/` stays a folder inside `tests/SplitBook.Api.Tests/` — not a separate project.
 
 **Rationale:** fewer moving parts, fewer `.csproj` references for the model to mis-wire, less solution-file churn per slice.
+
+## D-04: Database initialization — EnsureCreated (quick path)
+
+Use `db.Database.EnsureCreated()` in `Program.cs` after `builder.Build()`, wrapped in a scoped service resolution. No EF migrations for v1.
+
+**Rationale:** Slice 1.1's goal is minimal repair of the "tests green, prod broken" startup bug. `EnsureCreated()` is one line, requires no EF CLI tooling, no migration files, and no `.csproj` changes. The technical-spec §6 explicitly allows simplifications for v1. If schema evolution requires versioned migrations later, we can migrate to `Database.Migrate()` then and document the follow-up decision.
