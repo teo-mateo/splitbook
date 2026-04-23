@@ -16,3 +16,7 @@
 2026-04-23T15:33:15+02:00 CASE A — slice 4 criterion loop continuing; 5+ @test-writer invocations now (latest: 'members array current only'); log streaming 0s
 2026-04-23T15:38:00+02:00 CASE A — slice 4 test loop complete (6 test-writer invocations), now @reviewer active 42s; log streaming
 2026-04-23T15:43:07+02:00 CASE B — slice 4 complete (Groups — Detail, GET /groups/{id}); 40/40 tests pass; committed. Protocol (criterion-level TDD + typed DTOs) worked cleanly.
+2026-04-23T15:47:31+02:00 CASE A — slice 4.1 started; @spec-auditor active ('Audit slice 4.1 spec'); log streaming
+2026-04-23T15:52:23+02:00 CASE A — slice 4.1 refactor active: 3 test files modified (CreateGroup/GetGroup/ListMyGroups), new TestOnlyDtos.cs created, no @test-writer (correct for special-shape); log streaming
+2026-04-23T15:57:10+02:00 CASE A — slice 4.1 in reviewer phase (30s); refactor done, test-writer correctly skipped; log streaming
+2026-04-23T16:08:00+02:00 CASE B — slice 4.1 complete (already committed by primary as b17511a); 40/40 tests green; no additional action needed
