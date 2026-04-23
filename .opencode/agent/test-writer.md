@@ -65,9 +65,31 @@ You are a thinking model. This section exists because you will otherwise loop.
 
 When in doubt, pick the simplest option that exercises the given criterion and move.
 
+## Style — JSON response assertions
+
+When asserting on a JSON response body with more than ~2 fields, **DO NOT use `JsonDocument.Parse` + `TryGetProperty` + `.Should().BeTrue()` chains**. That pattern is verbose, hard to read, and leaks into every subsequent test by precedent.
+
+Preferred: declare a test-local DTO record in the test file or in `tests/SplitBook.Api.Tests/Infrastructure/TestDtos.cs` and deserialize with `await response.Content.ReadFromJsonAsync<GroupDetailDto>()` (namespace `System.Net.Http.Json`). Then assert on typed properties with FluentAssertions directly.
+
+```csharp
+internal record GroupDetailDto(Guid Id, string Name, string Currency, DateTimeOffset CreatedAt, MemberDto[] Members);
+internal record MemberDto(Guid UserId, string Email, string DisplayName);
+
+// in the test:
+var dto = await response.Content.ReadFromJsonAsync<GroupDetailDto>();
+dto.Should().NotBeNull();
+dto!.Name.Should().Be("Lisbon Trip");
+dto.Members.Should().HaveCount(1);
+```
+
+`JsonDocument.Parse` is acceptable ONLY for single-field lookups (e.g. pulling `accessToken` out of a login response) or JWT payload decoding — places where defining a DTO is overkill. For any response shape assertion, typed DTOs are the rule.
+
+If you see existing tests using the `JsonDocument.Parse` antipattern — they are slice 1 artifacts. Do NOT replicate. Your new test should use the typed-DTO approach.
+
 ## Hard rules
 
 - **Exactly ONE new test per invocation.** More than one = protocol violation.
+- **Never edit an existing test to add assertions for a new criterion.** If you think "the field checks belong in the existing test", no — the primary called you for a new criterion, which means a new `[Fact]` method. Shared setup goes in helpers or the fixture, not by mutating tests.
 - Do not modify files under `src/SplitBook.Api/Features/` or `src/SplitBook.Api/Domain/` (except adding test-only fakes in `tests/`).
 - Do not write test doubles for the database; use the test `WebApplicationFactory` with a SQLite test fixture per technical-spec §7.
 - Do not skip, `[Fact(Skip=...)]`, or `[Trait("skip",...)]` any new test.

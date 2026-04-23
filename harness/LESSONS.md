@@ -16,6 +16,11 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** The `test-writer` subagent must run `dotnet test` and show that the new tests fail before any production code is written. If tests pass before implementation, they are wrong.
 - **Why:** TDD only provides its safety signal when the red state is verified, not assumed.
 
+### L-H9 [HUMAN]: First slice locks in code style — pick well or fix explicitly
+- **Observed in:** slices 1–4 — slice 1's tests used `JsonDocument.Parse` + `TryGetProperty` + `.Should().BeTrue()` chains for response assertions. Every subsequent test copied the pattern verbatim because `test-writer.md` says "re-use fixtures already present" and the model generalized "fixtures" to "any established pattern."
+- **Lesson:** The first slice that introduces a new kind of code (test fixtures, handler shape, error mapping, logging, validation helpers) sets a precedent that propagates silently through every later slice on this model. If the first slice's pattern is suboptimal, fixing it requires an explicit prompt-level override ("do NOT replicate the slice-N antipattern — use approach X instead"). Retroactively refactoring older slices to the new pattern is optional; what matters is stopping the propagation.
+- **Why:** Qwen3 aggressively imitates in-repo precedent — that's usually what we want (consistency). But it has no quality filter on what it imitates. Surface-level "re-use what's there" does not distinguish "legit shared fixture" from "suboptimal one-off that happened first." Must be told explicitly when a pattern is undesirable.
+
 ### L-H8 [HUMAN]: One test per @test-writer invocation
 - **Observed in:** slice 1 (110K char spiral), slice 4 (15 malformed pending writes, hard stuck)
 - **Lesson:** The primary invokes `@test-writer` **once per acceptance criterion**, not once per slice. Test-writer receives a single criterion, writes a single failing test, runs a filtered `dotnet test` on only that test, and returns. The primary then writes the minimum production code to turn that one test green, then invokes `@test-writer` for the next criterion. Never ask `@test-writer` for "all tests for this slice" in one shot.
