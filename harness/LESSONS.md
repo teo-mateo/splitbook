@@ -76,10 +76,10 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** When `technical-spec.md` §9 lists open questions for the implementer to decide, the primary must document the decision in code comments or `DECISIONS.md` at the point it is made. Do not defer this to a later slice.
 - **Why:** The reviewer flagged that the health endpoint's location (minimal API vs. controller) was decided but not recorded. Undocumented decisions accumulate technical debt and make cross-slice consistency checks impossible.
 
-### L-05: Use TypedResults.Problem() for RFC 7807 error responses
-- **Observed in:** slice 1
-- **Lesson:** When the spec demands RFC 7807 Problem+JSON for error responses, use `TypedResults.Problem()` (or `Results.Problem()`) — not `TypedResults.BadRequest<T>` or similar typed helpers. The typed helpers produce a bare JSON body, not the `type/title/status` envelope Problem+JSON requires. Every slice that returns validation or business-rule errors will need this.
-- **Why:** The primary initially used `TypedResults.BadRequest<T>` which doesn't match the Problem+JSON shape. The reviewer caught it, but every subsequent slice will face the same choice and is likely to make the same mistake.
+### L-05: Use TypedResults.Problem() for ALL non-2xx error responses
+- **Observed in:** slice 1 (BadRequest), slice 4 (NotFound)
+- **Lesson:** When the spec demands RFC 7807 Problem+JSON for error responses, use `TypedResults.Problem()` for every non-2xx response — not just validation errors. Convenience helpers like `TypedResults.NotFound()`, `TypedResults.BadRequest<T>`, `TypedResults.Conflict()`, etc. produce bare JSON bodies, not the `type/title/status` Problem+JSON envelope. This applies to 404, 400, 409, 412, and any other error status code.
+- **Why:** The primary used `TypedResults.BadRequest<T>` in slice 1 and `TypedResults.NotFound()` in slice 4 — neither matches the Problem+JSON shape. Every slice returning any kind of error response will face this choice. Sharpened from original (slice 1 only, framed as "validation/business-rule errors") to cover all error status codes after slice 4 surfaced the same issue with 404.
 
 ### L-06: Wire packages you add, or don't add them
 - **Observed in:** slice 1

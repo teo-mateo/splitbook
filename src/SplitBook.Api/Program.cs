@@ -5,6 +5,7 @@ using SplitBook.Api.Features.Auth.Login;
 using SplitBook.Api.Features.Auth.Register;
 using SplitBook.Api.Features.Groups.CreateGroup;
 using SplitBook.Api.Features.Groups.ListMyGroups;
+using SplitBook.Api.Features.Groups.GetGroup;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,7 @@ try
     var groups = app.MapGroup("/groups").RequireAuthorization();
     groups.MapListMyGroups();
     groups.MapCreateGroup();
+    groups.MapGetGroup();
 
     app.Run();
     return 0;
