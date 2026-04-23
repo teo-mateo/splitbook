@@ -86,6 +86,24 @@ dto.Members.Should().HaveCount(1);
 
 If you see existing tests using the `JsonDocument.Parse` antipattern — they are slice 1 artifacts. Do NOT replicate. Your new test should use the typed-DTO approach.
 
+## Style — never index into deserialized collections
+
+**Do NOT use positional access (`list[0]`, `list[1]`, `Members[1].UserId`) to find a specific item in a response collection.** Server-side query result order is implementation-defined in SQLite unless the handler has an explicit `OrderBy`, and relying on a particular order makes the test flaky — sometimes green, sometimes red, same code.
+
+Identify items by a known property instead:
+
+```csharp
+// BAD — assumes Members[1] is always user B (non-deterministic under SQLite)
+var userBId = groupDetail!.Members[1].UserId;
+
+// GOOD — find by a property you control (display name, email, etc.)
+var userBId = groupDetail!.Members.Single(m => m.DisplayName == "UserB").UserId;
+```
+
+Use `.Single(predicate)` when you expect exactly one match (makes the assertion explicit and the failure message clear), `.First(predicate)` only when duplicates are legitimate. For count-only assertions (`Members.Should().HaveCount(1)`), indexing isn't needed at all.
+
+This applies to any response collection: members, memberships, expenses, groups, splits — anything where the primary slice doesn't guarantee an order. If the feature's contract *does* include ordering (e.g. a list sorted by `CreatedAt` desc), still prefer `.Single(predicate)` for identity lookups and use separate explicit assertions to verify the order invariant.
+
 ## Hard rules
 
 - **Exactly ONE new test per invocation.** More than one = protocol violation.
