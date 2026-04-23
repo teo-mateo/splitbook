@@ -1,0 +1,5 @@
+2026-04-23T14:20:49+02:00 CASE A — slice 4 in-flight; opencode pid 1914229 alive; test-writer last active 290s ago; log streaming (mtime 0s); primary has begun scaffolding
+2026-04-23T14:25:34+02:00 CASE A — slice 4 still in-flight; pid 1914229 alive, log streaming 0s (GPU active), test-writer 575s into work — likely long thinking trace
+2026-04-23T14:30:28+02:00 CASE A — slice 4 still active; opencode pid 1914229 alive, log streaming 0s, test-writer 864s in — long trace, no truncation (running)
+2026-04-23T14:38:41+02:00 DEGENERATE CASE A — slice 4 test-writer ses_245bbfd43 now at 15 pending write calls (was 14, +1 in 5min); process alive but producing empty tool calls. Not killing without user direction. Stopping cron reschedule — human attention needed.
+2026-04-23T14:40:53+02:00 USER DIRECTED KILL of pid 1914229 — slice 4 aborted, user will restart via UI
