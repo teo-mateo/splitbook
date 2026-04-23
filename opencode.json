@@ -77,6 +77,8 @@
       "head *": "allow",
       "tail *": "allow",
       "find *": "allow",
+      "sort*": "allow",
+      "uniq*": "allow",
       "grep *": "allow",
       "rg *": "allow",
       "wc *": "allow",
