@@ -1,7 +1,7 @@
 ---
 description: Read-only review of the current slice's diff against spec, tests, and lessons. Produces a structured pass/findings report. Cannot write code.
 mode: subagent
-model: heapzilla/vllm-qwen3-6-27b-fp8
+model: heapzilla/vllm-qwen3.6-35b-a3b
 tools:
   write: false
   edit: false
