@@ -18,4 +18,6 @@ Then, in your first reply, output:
 
 Then follow the per-slice loop documented in `harness/README.md` §2 exactly. Do not skip steps. Do not merge roles. Invoke the subagents with `@spec-auditor`, `@test-writer`, `@reviewer`, and `@lessons-scribe` at the points the protocol specifies.
 
+**IMPORTANT — test-writer is invoked once per acceptance criterion, not once per slice.** After `@spec-auditor` returns N criteria, you run an inner loop: for each criterion, invoke `@test-writer` with that single criterion, get one failing test, implement minimal code to make it pass, then move to the next criterion. See `harness/README.md` §2 diagram and `LESSONS.md` L-H8. Do NOT ask `@test-writer` to write "all tests for this slice" — it WILL fail.
+
 At the end, write `harness/logs/slice-NN.md` with the session summary described in §5 of the harness README. Do not commit — that is a human decision.

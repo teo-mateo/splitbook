@@ -16,6 +16,11 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** The `test-writer` subagent must run `dotnet test` and show that the new tests fail before any production code is written. If tests pass before implementation, they are wrong.
 - **Why:** TDD only provides its safety signal when the red state is verified, not assumed.
 
+### L-H8 [HUMAN]: One test per @test-writer invocation
+- **Observed in:** slice 1 (110K char spiral), slice 4 (15 malformed pending writes, hard stuck)
+- **Lesson:** The primary invokes `@test-writer` **once per acceptance criterion**, not once per slice. Test-writer receives a single criterion, writes a single failing test, runs a filtered `dotnet test` on only that test, and returns. The primary then writes the minimum production code to turn that one test green, then invokes `@test-writer` for the next criterion. Never ask `@test-writer` for "all tests for this slice" in one shot.
+- **Why:** Batch test-writing produces multi-K-token reasoning spirals and malformed tool-call streams on this model class. Slice 4 hung on 15 pending write tool calls with empty args because the subagent's context bloated past its ability to serialize tool calls cleanly. One-test-per-invocation keeps thinking traces short (~3–5K), keeps subagent context tiny, restores the per-test TDD signal, and contains failures to a single test when something goes wrong.
+
 ### L-H7 [HUMAN]: Tests green ≠ app works — smoke-test the running API
 - **Observed in:** slice 1 (discovered post-scribe during manual run)
 - **Lesson:** An integration-test project that uses `WebApplicationFactory` overrides startup in ways that hide production bugs. Slice 1 shipped with 16/16 tests green but `dotnet run` returned HTTP 500 on every endpoint because `Program.cs` never created the DB schema — the test factory did. For any slice that adds or changes something at application startup (DbContext, middleware order, DI wiring, migrations, auth config), the slice is NOT done until a real `dotnet run` + `curl` smoke against a fresh filesystem succeeds on the slice's golden path. The reviewer's checklist should include this for any startup-touching slice.

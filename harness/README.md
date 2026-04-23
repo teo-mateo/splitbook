@@ -37,12 +37,25 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
   primary invokes @spec-auditor                 │
   │  → returns acceptance-criteria checklist    │
   ▼                                             │
-  primary invokes @test-writer                  │
-  │  → writes failing tests, confirms RED       │
+  primary writes pre-test scaffolding           │
+  │  → csproj, DI wiring, empty placeholders    │
+  │                                             │
   ▼                                             │
-  primary implements production code            │
-  │  → runs `dotnet test` until GREEN           │
-  │  → refactors, tests still GREEN             │
+  for each acceptance criterion:  ◄─────────────┐
+  │                                             │
+  ├─ primary invokes @test-writer               │
+  │    with ONE criterion                       │
+  │    → writes ONE failing test                │
+  │    → runs dotnet test (filtered) RED        │
+  │                                             │
+  ├─ primary implements minimal code            │
+  │    for that one test only                   │
+  │    → dotnet test (filtered) GREEN           │
+  │    → commit checkpoint (optional)           │
+  │                                             │
+  └─ next criterion ────────────────────────────┤
+                                                │
+  (all criteria green)                          │
   ▼                                             │
   primary invokes @reviewer                     │
   │  → report: {status, findings[]}             │
@@ -53,10 +66,14 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
   primary invokes @lessons-scribe
   │  → LESSONS.md updated (or explicitly noted "no new")
   ▼
+  primary writes harness/logs/slice-NN.md
+  ▼
   human reads the diff + LESSONS.md + reviewer report,
   decides to accept / request rework / adjust specs,
   then moves to next slice.
 ```
+
+**Inner loop — criterion-level TDD.** `@test-writer` is invoked ONCE PER ACCEPTANCE CRITERION, not once per slice. Primary writes one test worth of production code before invoking test-writer for the next. This keeps each subagent call small (short thinking traces, tight context, clean tool-call streams) and gives a real per-test red→green signal. See `LESSONS.md` **L-H8**.
 
 Maximum **3 reviewer→fix rounds** per slice before the human is pulled in. This prevents loops where the model thrashes on an issue it cannot see.
 
