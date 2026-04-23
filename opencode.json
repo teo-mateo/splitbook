@@ -53,7 +53,7 @@
       "git ls-files*": "allow",
       "git show*": "allow",
       "git blame*": "allow",
-      "git commit *": "ask",
+      "git commit *": "allow",
       "git push*": "ask",
       "git reset*": "ask",
       "git clean*": "ask",

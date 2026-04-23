@@ -72,5 +72,4 @@ Slice 1's 16 passing xUnit tests hid a production bug: `AppFactory.cs` calls `En
 - **Red first.** Start each slice by writing integration tests that fail because the endpoint 404s. The test-writer subagent is responsible for this. Confirm red by quoting `dotnet test` output.
 - **One open question per slice, max.** If a slice surfaces more than one architectural decision, stop and escalate to the reviewer subagent rather than guessing.
 - **Refactor is part of the slice.** The slice is not done until the code you just wrote is clean — dead code, placeholder names, duplicated mapping, method bodies that never execute, etc., all go before DoD.
-- **Smoke gate.** After xUnit is green, invoke `@smoke-tester` to extend `scripts/smoke.sh` and verify the real API over HTTP. A slice is not done until smoke is green. Applies to every slice except 0.
 - **The definition of "done" is strict.** If you find yourself thinking "we'll clean that up in a later slice," either make that an explicit follow-up noted in the slice log OR clean it up now. Both are acceptable; silent deferral is not.
