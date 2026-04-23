@@ -1,0 +1,24 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Test artifacts
+TestResults/
+*.trx
+coverage.*.xml
+
+# SQLite artifacts (test + dev DBs)
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+.vscode/
+
+# opencode / claude operator state
+.opencode/logs/
+.claude/

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "heapzilla": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Heapzilla vLLM",
+      "options": {
+        "baseURL": "https://api.ai.heapzilla.eu/v1",
+        "apiKey": "{env:HEAPZILLA_API_KEY}"
+      },
+      "models": {
+        "vllm-qwen3-6-27b-fp8": {
+          "name": "Qwen3.6-27B-FP8 (local)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 8192,
+            "temperature": 0.2,
+            "top_p": 0.9
+          }
+        }
+      }
+    }
+  },
+  "model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "small_model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "instructions": [
+    "specs/product-spec.md",
+    "specs/technical-spec.md",
+    "specs/slice-plan.md",
+    "DECISIONS.md",
+    "harness/README.md",
+    "harness/LESSONS.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "dotnet *": "allow",
+      "git diff*": "allow",
+      "git status*": "allow",
+      "git log*": "allow",
+      "git add *": "allow",
+      "git restore --staged*": "allow",
+      "git commit *": "ask",
+      "git push*": "ask",
+      "git reset*": "ask",
+      "git clean*": "ask",
+      "git checkout*": "ask",
+      "mkdir *": "allow",
+      "mv *": "allow",
+      "cp *": "allow",
+      "touch *": "allow",
+      "ls*": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "find *": "allow",
+      "grep *": "allow",
+      "rg *": "allow",
+      "wc *": "allow",
+      "echo *": "allow",
+      "pwd": "allow",
+      "true": "allow",
+      "false": "allow",
+      "rm *": "ask",
+      "rmdir *": "ask",
+      "curl *": "ask",
+      "wget *": "ask",
+      "sudo *": "ask",
+      "chmod *": "ask",
+      "npm *": "ask",
+      "bun *": "ask",
+      "*": "ask"
+    }
+  }
+}
