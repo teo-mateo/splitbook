@@ -3,6 +3,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using SplitBook.Api.Features.Auth.Login;
 using SplitBook.Api.Features.Auth.Register;
+using SplitBook.Api.Features.Groups.CreateGroup;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -59,9 +60,8 @@ try
     auth.MapRegister();
     auth.MapLogin();
 
-    // Temporary stub for slice 1 auth verification — replaced by real endpoints in slice 2
     var groups = app.MapGroup("/groups").RequireAuthorization();
-    groups.MapGet("/", () => Results.Ok(new object[0]));
+    groups.MapCreateGroup();
 
     app.Run();
     return 0;

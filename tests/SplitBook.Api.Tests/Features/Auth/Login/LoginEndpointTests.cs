@@ -167,8 +167,8 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
 
         // Act — hit a route that should require authentication
-        // /groups is the group list endpoint which requires auth per technical-spec §4
-        var response = await client.GetAsync("/groups");
+        // POST /groups requires auth per technical-spec §4
+        var response = await client.PostAsJsonAsync("/groups", new { name = "test", currency = "USD" });
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);

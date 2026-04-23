@@ -40,7 +40,8 @@
       "test-writer": "allow",
       "reviewer": "allow",
       "lessons-scribe": "allow",
-      "researcher": "allow"
+      "researcher": "allow",
+      "smoke-tester": "allow"
     },
     "bash": {
       "dotnet *": "allow",

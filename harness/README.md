@@ -22,6 +22,7 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
 | `reviewer` | subagent (plan mode — read-only) | After primary reports green: reads the diff, the specs, and LESSONS.md. Emits a structured report (`pass` / `findings[]`). Each finding has severity, file:line, and a one-line fix hint | read, grep, bash (scoped to `git diff`, `dotnet test`) |
 | `lessons-scribe` | subagent | End of slice: reads the reviewer report and the session transcript, distills ≤3 new lessons, merges into LESSONS.md respecting the cap. Deletes lessons that newer ones supersede | read, write (LESSONS.md only) |
 | `researcher` | subagent (read-only + web) | On demand: invoked by ANY other agent (primary, test-writer, reviewer) with a focused library/API/pattern question. Looks it up via webfetch/websearch/Context7 and returns a distilled answer + one example + sources. Keeps the caller's main context clean. | read, webfetch, websearch |
+| `smoke-tester` | subagent | After primary's xUnit is green, extends `scripts/smoke.sh` with curl assertions for the slice's new endpoints, starts the real API, runs the smoke, returns pass/fail with quoted HTTP codes. Blocks the `@reviewer` step until smoke is green. Protects against the "tests green, `dotnet run` broken" failure (L-H7). | write/edit (`scripts/smoke.sh` only), dotnet build/run, curl, kill, pgrep |
 
 ## 2. Per-slice loop
 
@@ -44,6 +45,12 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
   │  → runs `dotnet test` until GREEN           │
   │  → refactors, tests still GREEN             │
   ▼                                             │
+  primary invokes @smoke-tester                 │
+  │  → extends scripts/smoke.sh                 │
+  │  → runs API + curl assertions               │
+  │  → returns pass/fail                        │
+  │  if fail → primary fixes → @smoke-tester ──┘
+  ▼
   primary invokes @reviewer                     │
   │  → report: {status, findings[]}             │
   │                                             │
