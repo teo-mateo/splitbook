@@ -16,6 +16,11 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** The `test-writer` subagent must run `dotnet test` and show that the new tests fail before any production code is written. If tests pass before implementation, they are wrong.
 - **Why:** TDD only provides its safety signal when the red state is verified, not assumed.
 
+### L-H2 [HUMAN]: Primary writes no logic before red
+- **Observed in:** slice 1
+- **Lesson:** Between reading the specs and `@test-writer` returning RED, the primary's file edits are limited to: `.csproj` (package refs), `Program.cs` (DI registrations and route mapping only), `appsettings.json`, and empty placeholder types (enough to let referenced types resolve — e.g. `public class JwtTokenService { }` with no body). Handler method bodies, domain logic, password hashing, token generation, EF model configuration, entity property logic, mapping code — NONE of these may be written before `@test-writer` confirms RED. If a test requires a type to exist, create an empty class; the body comes after red.
+- **Why:** In slice 1 the primary wrote `JwtTokenService`, `PasswordHasher`, `AppDbContext`, and `User.cs` with full implementations before invoking `@test-writer`. Tests were then written to match existing code, which inverts TDD and destroys the design-pressure signal the harness depends on.
+
 ### L-H1 [HUMAN]: Subagents MUST verify with the tools they have
 - **Observed in:** slice 0
 - **Lesson:** `test-writer` must actually run `dotnet test` and quote its output before returning, not just infer the red state from having written tests. `reviewer` must actually run `git diff` and `dotnet test` and quote their exit codes in its report. If a bash command comes back "invalid" or is unavailable, STOP and surface this — do not silently fall back to reading files and claim you've reviewed.

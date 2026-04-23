@@ -24,6 +24,8 @@ All subagents live in `.opencode/agent/` and are invoked via `@<name>` or auto-d
 
 ## 2. Per-slice loop
 
+**Primary does NOT write production logic before `@test-writer` returns RED.** Pre-test edits by the primary are limited to compile-enabling scaffolding: `.csproj`, `Program.cs` (DI wiring and route mapping only), `appsettings.json`, and empty placeholder types. Handler bodies, domain logic, hashing, token generation, EF configuration, mapping — all of that waits until red is verified. See `LESSONS.md` **L-H2**.
+
 ```
   ┌─ human starts a slice session in opencode ─┐
   │                                             │
