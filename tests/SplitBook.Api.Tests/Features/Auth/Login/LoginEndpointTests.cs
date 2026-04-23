@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using SplitBook.Api.Features.Auth.Login;
+using SplitBook.Api.Features.Auth.Register;
 using SplitBook.Api.Tests.Infrastructure;
 using Xunit;
 
@@ -17,13 +19,10 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         _factory = factory;
     }
 
-    /// <summary>
-    /// Helper: register a user and return the email/password pair.
-    /// </summary>
     private async Task<(string Email, string Password)> RegisterUserAsync(string email, string password)
     {
         var client = _factory.CreateClient();
-        var request = new { email, displayName = "TestUser", password };
+        var request = new RegisterRequest(email, "TestUser", password);
         var response = await client.PostAsJsonAsync("/auth/register", request);
         response.EnsureSuccessStatusCode();
         return (email, password);
@@ -37,20 +36,15 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var (email, password) = await RegisterUserAsync("jwttest@example.com", "JwtPass123!");
 
         // Act
-        var loginRequest = new { email, password };
+        var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var body = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        root.TryGetProperty("accessToken", out var token).Should().BeTrue();
-        token.GetString().Should().NotBeNullOrEmpty();
-
-        root.TryGetProperty("expiresAt", out var expiresAt).Should().BeTrue();
-        expiresAt.GetString().Should().NotBeNullOrEmpty();
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBeNullOrEmpty();
+        result.ExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow);
     }
 
     [Fact]
@@ -61,7 +55,7 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         await RegisterUserAsync("wrongpw@example.com", "CorrectPass123!");
 
         // Act
-        var loginRequest = new { email = "wrongpw@example.com", password = "WrongPassword!" };
+        var loginRequest = new LoginRequest("wrongpw@example.com", "WrongPassword!");
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
 
         // Assert
@@ -75,7 +69,7 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
 
         // Act
-        var loginRequest = new { email = "doesnotexist@example.com", password = "SomePassword123!" };
+        var loginRequest = new LoginRequest("doesnotexist@example.com", "SomePassword123!");
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
 
         // Assert
@@ -90,24 +84,21 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var (email, password) = await RegisterUserAsync("claims@example.com", "ClaimsPass123!");
 
         // Act
-        var loginRequest = new { email, password };
+        var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var body = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(body);
-        var accessToken = doc.RootElement.GetProperty("accessToken").GetString();
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
 
         // Assert
-        accessToken.Should().NotBeNullOrEmpty();
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBeNullOrEmpty();
 
-        // Decode the JWT payload (middle segment) to inspect claims
-        var parts = accessToken!.Split('.');
+        var parts = result.AccessToken.Split('.');
         parts.Should().HaveCount(3, "JWT must have three parts (header.payload.signature)");
 
         var payloadJson = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
         var payloadDoc = JsonDocument.Parse(payloadJson);
         var payload = payloadDoc.RootElement;
 
-        // Check required claims per technical-spec §5
         payload.TryGetProperty("sub", out var sub).Should().BeTrue("JWT must contain 'sub' claim");
         sub.GetString().Should().NotBeNullOrEmpty();
 
@@ -138,14 +129,13 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var (email, password) = await RegisterUserAsync("expiry@example.com", "ExpiryPass123!");
 
         // Act
-        var loginRequest = new { email, password };
+        var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var body = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(body);
-        var accessToken = doc.RootElement.GetProperty("accessToken").GetString();
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
 
         // Assert
-        var parts = accessToken!.Split('.');
+        result.Should().NotBeNull();
+        var parts = result!.AccessToken.Split('.');
         var payloadJson = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
         var payloadDoc = JsonDocument.Parse(payloadJson);
         var payload = payloadDoc.RootElement;
@@ -154,9 +144,8 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var iat = payload.GetProperty("iat").GetInt64();
 
         var lifetimeSeconds = exp - iat;
-        var expectedSeconds = 24L * 60 * 60; // 24 hours in seconds
+        var expectedSeconds = 24L * 60 * 60;
 
-        // Allow a small tolerance (up to 60 seconds) for clock skew during test execution
         lifetimeSeconds.Should().BeInRange(expectedSeconds - 60, expectedSeconds + 60);
     }
 
@@ -167,17 +156,12 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
 
         // Act — hit a route that should require authentication
-        // POST /groups requires auth per technical-spec §4
         var response = await client.PostAsJsonAsync("/groups", new { name = "test", currency = "USD" });
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    /// <summary>
-    /// Decodes a Base64URL-encoded string (JWT segment) back to bytes.
-    /// Handles missing padding that JWT segments often omit.
-    /// </summary>
     private static byte[] Base64UrlDecode(string input)
     {
         var base64 = input.Replace('-', '+').Replace('_', '/');
