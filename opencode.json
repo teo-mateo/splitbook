@@ -40,8 +40,7 @@
       "test-writer": "allow",
       "reviewer": "allow",
       "lessons-scribe": "allow",
-      "researcher": "allow",
-      "smoke-tester": "allow"
+      "researcher": "allow"
     },
     "bash": {
       "dotnet *": "allow",
@@ -50,6 +49,10 @@
       "git log*": "allow",
       "git add *": "allow",
       "git restore --staged*": "allow",
+      "git check-ignore*": "allow",
+      "git ls-files*": "allow",
+      "git show*": "allow",
+      "git blame*": "allow",
       "git commit *": "ask",
       "git push*": "ask",
       "git reset*": "ask",
