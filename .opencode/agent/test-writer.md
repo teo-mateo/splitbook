@@ -1,7 +1,7 @@
 ---
 description: Given ONE acceptance criterion, write a single failing xUnit test that exercises it. Writes no production code. Confirms that single test fails. Primary invokes you once per criterion.
 mode: subagent
-model: heapzilla/vllm-gemma-4-31b-fp8
+model: heapzilla/vllm-qwen3-6-27b-fp8
 tools:
   write: true
   edit: true

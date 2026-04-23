@@ -15,8 +15,12 @@
           "reasoning": true,
           "options": {
             "max_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": 0.9
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 0.0,
+            "repetition_penalty": 1.0
           }
         },
         "vllm-qwen3.6-35b-a3b": {
@@ -40,10 +44,22 @@
           }
         }
       }
+    },
+    "OpenRouter": {
+      "models": {
+        "anthropic/claude-haiku-4.5": {
+          "name": "Claude Haiku 4.5 (OpenRouter)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768
+          }
+        }
+      }
     }
   },
-  "model": "heapzilla/vllm-gemma-4-31b-fp8",
-  "small_model": "heapzilla/vllm-gemma-4-31b-fp8",
+  "model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "small_model": "heapzilla/vllm-qwen3-6-27b-fp8",
   "instructions": [
     "specs/product-spec.md",
     "specs/technical-spec.md",
@@ -93,12 +109,15 @@
       "echo *": "allow",
       "pwd": "allow",
       "true": "allow",
+      "true *": "allow",
       "false": "allow",
+      "cd *": "allow",
       "curl *": "allow",
       "sleep *": "allow",
       "timeout *": "allow",
       "nohup *": "allow",
       "kill *": "allow",
+      "killall *": "allow",
       "pkill *": "allow",
       "pgrep *": "allow",
       "ps *": "allow",
