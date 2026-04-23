@@ -16,6 +16,11 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** The `test-writer` subagent must run `dotnet test` and show that the new tests fail before any production code is written. If tests pass before implementation, they are wrong.
 - **Why:** TDD only provides its safety signal when the red state is verified, not assumed.
 
+### L-H3 [HUMAN]: Thinking-model output budget
+- **Observed in:** slice 1 (test-writer returned empty)
+- **Lesson:** For this Qwen3 thinking model, `max_tokens` must be generous (≥ 32K). Reasoning traces for multi-step subagent tasks (read 10 files + plan test structure + write tests) routinely consume 10K–20K tokens *before* the first tool call or text output. A low ceiling makes subagents return empty silently — the generation terminates mid-think with `finish_reason=length`, opencode reports "empty return", and the primary is forced to improvise.
+- **Why:** Slice 1's `@test-writer` used all 8192 output tokens inside its thinking trace, never reached any tool call, and returned nothing. Primary fell back to writing tests itself — a harness protocol violation caused entirely by a client-side setting.
+
 ### L-H2 [HUMAN]: Primary writes no logic before red
 - **Observed in:** slice 1
 - **Lesson:** Between reading the specs and `@test-writer` returning RED, the primary's file edits are limited to: `.csproj` (package refs), `Program.cs` (DI registrations and route mapping only), `appsettings.json`, and empty placeholder types (enough to let referenced types resolve — e.g. `public class JwtTokenService { }` with no body). Handler method bodies, domain logic, password hashing, token generation, EF model configuration, entity property logic, mapping code — NONE of these may be written before `@test-writer` confirms RED. If a test requires a type to exist, create an empty class; the body comes after red.
