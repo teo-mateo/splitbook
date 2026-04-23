@@ -1,7 +1,7 @@
 ---
 description: Given the spec-auditor's acceptance criteria, write failing xUnit tests for the current slice. Write NO production code. Confirm all new tests fail before returning.
 mode: subagent
-model: heapzilla/vllm-qwen3.6-35b-a3b
+model: heapzilla/vllm-qwen3-6-27b-fp8
 tools:
   write: true
   edit: true

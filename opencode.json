@@ -32,8 +32,8 @@
       }
     }
   },
-  "model": "heapzilla/vllm-qwen3.6-35b-a3b",
-  "small_model": "heapzilla/vllm-qwen3.6-35b-a3b",
+  "model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "small_model": "heapzilla/vllm-qwen3-6-27b-fp8",
   "instructions": [
     "specs/product-spec.md",
     "specs/technical-spec.md",
@@ -77,8 +77,6 @@
       "head *": "allow",
       "tail *": "allow",
       "find *": "allow",
-      "sort*": "allow",
-      "uniq*": "allow",
       "grep *": "allow",
       "rg *": "allow",
       "wc *": "allow",

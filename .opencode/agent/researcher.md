@@ -1,7 +1,7 @@
 ---
 description: When another agent is uncertain about a library API, framework behavior, or established pattern — this agent looks it up (official docs, GitHub code, Context7) and returns a distilled answer with one concrete example. Never writes code or files.
 mode: subagent
-model: heapzilla/vllm-qwen3.6-35b-a3b
+model: heapzilla/vllm-qwen3-6-27b-fp8
 tools:
   write: false
   edit: false
