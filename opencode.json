@@ -28,12 +28,22 @@
             "temperature": 0.2,
             "top_p": 0.9
           }
+        },
+        "vllm-gemma-4-31b-fp8": {
+          "name": "Gemma-4-31B-FP8 (local)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768,
+            "temperature": 0.2,
+            "top_p": 0.9
+          }
         }
       }
     }
   },
-  "model": "heapzilla/vllm-qwen3-6-27b-fp8",
-  "small_model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "model": "heapzilla/vllm-gemma-4-31b-fp8",
+  "small_model": "heapzilla/vllm-gemma-4-31b-fp8",
   "instructions": [
     "specs/product-spec.md",
     "specs/technical-spec.md",

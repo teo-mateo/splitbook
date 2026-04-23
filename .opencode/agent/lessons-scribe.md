@@ -1,7 +1,7 @@
 ---
 description: At the end of a slice, distill at most 3 new lessons into harness/LESSONS.md, respecting the size cap. Can only edit LESSONS.md.
 mode: subagent
-model: heapzilla/vllm-qwen3-6-27b-fp8
+model: heapzilla/vllm-gemma-4-31b-fp8
 tools:
   write: true
   edit: true

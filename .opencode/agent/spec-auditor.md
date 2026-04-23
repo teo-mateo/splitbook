@@ -1,7 +1,7 @@
 ---
 description: Read the specs for the current slice and produce a flat acceptance-criteria checklist. Flag any ambiguity or contradiction. Never writes code.
 mode: subagent
-model: heapzilla/vllm-qwen3-6-27b-fp8
+model: heapzilla/vllm-gemma-4-31b-fp8
 tools:
   write: false
   edit: false
