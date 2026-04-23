@@ -1,7 +1,7 @@
 ---
 description: Read-only review of the current slice's diff against spec, tests, and lessons. Produces a structured pass/findings report. Cannot write code.
 mode: subagent
-model: heapzilla/vllm-gemma-4-31b-fp8
+model: heapzilla/llamacpp-UNSLOTH-qwen3-5-122b-a10b-q4
 tools:
   write: false
   edit: false
@@ -55,6 +55,22 @@ L-H2 says the primary must not write production logic before `@test-writer` retu
 
 A missing L-H2 check in your report is itself a harness failure.
 
+## Consistency / homogeneity — REQUIRED every slice (L-H11)
+
+Codebase homogeneity is not cosmetic; it is a hard review gate. Every new feature folder under `src/SplitBook.Api/Features/<Area>/<Op>/` MUST mirror the shape of the nearest existing sibling in the same area. Before you emit any finding, **open at least one existing sibling feature's `Handler.cs` and `Endpoint.cs`** (e.g. `CreateGroup`, `GetGroup`, `Register`, `Login`) and compare the new files against it on these axes:
+
+1. **Handler return type.** Existing handlers return a typed `Results<TOk, ProblemHttpResult>` union (or similar). If the new handler returns `Task` (void-ish) or `Task<IResult>` and instead throws exceptions for error paths → `major` finding, severity blocker if reviewer cannot see how current tests even assert status codes cleanly.
+2. **Error emission.** The established pattern is: validate and return `TypedResults.Problem(title, detail, statusCode)` inline in the handler (L-05). If the new code raises `KeyNotFoundException` / `ArgumentException` / similar and catches them in the endpoint wrapper → `major`. No feature in this repo is allowed to use exceptions as control flow for HTTP status mapping.
+3. **Endpoint registration shape.** Existing endpoints are one-liners: `group.MapPost("/", XxxHandler.HandleAsync)`. If the new endpoint defines its own nested `HandleAsync` function (or adds a try/catch shim around the handler call) → `major`.
+4. **Handler class form.** All handlers are `public static class` with static `HandleAsync`. A non-static `public class XxxHandler` that needs `new XxxHandler()` or DI registration is an outlier → `major`.
+5. **DTO file layout.** `XxxDtos.cs` contains only DTOs actually used by the endpoint. A `XxxResponse` record that is never returned (because the endpoint returns 204/NoContent or returns a reused DTO) is dead code → `minor`, flag it.
+6. **Validator presence.** If the existing same-area feature pairs each request-DTO with a `XxxValidator.cs` (FluentValidation), the new feature with a non-trivial request DTO must follow suit. Missing validator when a peer has one → `minor` (or `major` if the unvalidated input reaches persistence).
+7. **Namespace / usings hygiene.** Redundant explicit `using`s for namespaces that are globally imported elsewhere in the project → `nit`, but mention.
+
+**Said again, in different words:** when a new slice's code and the codebase's prior art disagree, the prior art wins unless the slice plan explicitly authorizes a departure. You are not judging the new code against your intuition of "clean"; you are judging it against **what the repo already does**. If `CreateGroupHandler` returns a typed Results union and calls `TypedResults.Problem(...)` inline, then `AddMemberHandler` must do the same — a handler that throws exceptions and relies on a try/catch wrapper in the endpoint is a bifurcation, even if it compiles, even if its tests pass, and even if the reasoning in the primary's head was "cleaner". Your job is to refuse to let the codebase fork into two parallel styles. Cite the sibling file(s) you compared against in your findings (e.g. "diverges from `Features/Groups/CreateGroup/CreateGroupHandler.cs`"). If you did not actually open a sibling for comparison, you did not do this check — state the omission instead of pretending.
+
+Concrete trigger: if a new feature folder exists in the diff and your findings list contains no entry citing a sibling feature by path, you have skipped the L-H11 check. Go back and do it.
+
 ## Review checklist (apply every time)
 
 For each acceptance criterion from the spec-auditor: is there a passing test that exercises it? (not just "a test exists" — does it actually assert the behavior?)
@@ -91,6 +107,7 @@ Return exactly this Markdown structure:
 - [x] no out-of-scope edits
 - [x] lessons cited and honored
 - [ ] **L-H2 verified via git log / tool-call order** (explicit — cite the evidence you checked)
+- [ ] **L-H11 consistency check done — cite the sibling feature file(s) compared against** (empty = skipped)
 - [ ] every speculative claim resolved via `@researcher` (none remaining unresolved)
 
 ### Notes

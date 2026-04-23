@@ -20,3 +20,5 @@
 2026-04-23T15:52:23+02:00 CASE A — slice 4.1 refactor active: 3 test files modified (CreateGroup/GetGroup/ListMyGroups), new TestOnlyDtos.cs created, no @test-writer (correct for special-shape); log streaming
 2026-04-23T15:57:10+02:00 CASE A — slice 4.1 in reviewer phase (30s); refactor done, test-writer correctly skipped; log streaming
 2026-04-23T16:08:00+02:00 CASE B — slice 4.1 complete (already committed by primary as b17511a); 40/40 tests green; no additional action needed
+2026-04-23T16:57:05+02:00 CASE A — slice 5 retry #3 on Qwen3.5-122B-A10B-Q4 (llama.cpp); fresh TUI session, spec-auditor running; config changes staged in worktree (not yet committed)
+2026-04-23T17:09:14+02:00 CASE D — added L-H11 (homogeneity rule) to LESSONS.md + reviewer.md consistency-check section and checklist item; hypothesis: reviewer will flag exception-based error handling / IResult returns / try-catch endpoint shims starting slice 6
