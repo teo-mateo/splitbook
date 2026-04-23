@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SplitBook.Api.Domain;
+using SplitBook.Api.Features.Auth.Login;
+using SplitBook.Api.Features.Auth.Register;
+using SplitBook.Api.Features.Groups.CreateGroup;
+using SplitBook.Api.Features.Groups.ListMyGroups;
 using SplitBook.Api.Infrastructure.Persistence;
 using SplitBook.Api.Tests.Infrastructure;
 using Xunit;
@@ -24,17 +27,15 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         var client = _factory.CreateClient();
 
-        var registerRequest = new { email, displayName = "TestUser", password };
+        var registerRequest = new RegisterRequest(email, "TestUser", password);
         var registerResponse = await client.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var loginRequest = new { email, password };
+        var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginBody = await loginResponse.Content.ReadAsStringAsync();
-        var loginDoc = JsonDocument.Parse(loginBody);
-        var accessToken = loginDoc.RootElement.GetProperty("accessToken").GetString();
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
 
-        return accessToken!;
+        return loginResult!.AccessToken;
     }
 
     private async Task<HttpClient> CreateAuthClientAsync(string email, string password)
@@ -66,13 +67,12 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
-        doc.RootElement.GetArrayLength().Should().Be(0);
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
     }
 
     [Fact]
@@ -80,23 +80,19 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — user creates a group via POST /groups
         var client = await CreateAuthClientAsync("creator@example.com", "Creator123!");
-        var createRequest = new { name = "My Trip", currency = "EUR" };
+        var createRequest = new CreateGroupRequest("My Trip", "EUR");
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
-        doc.RootElement.GetArrayLength().Should().Be(1);
-
-        var firstItem = doc.RootElement[0];
-        firstItem.TryGetProperty("name", out var name).Should().BeTrue();
-        name.GetString().Should().Be("My Trip");
+        result.Should().NotBeNull();
+        result!.Should().HaveCount(1);
+        result![0].Name.Should().Be("My Trip");
     }
 
     [Fact]
@@ -104,25 +100,21 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — user creates two groups
         var client = await CreateAuthClientAsync("multi@example.com", "Multi123!");
-        var group1 = new { name = "Group One", currency = "USD" };
-        var group2 = new { name = "Group Two", currency = "GBP" };
+        var group1 = new CreateGroupRequest("Group One", "USD");
+        var group2 = new CreateGroupRequest("Group Two", "GBP");
 
         (await client.PostAsJsonAsync("/groups", group1)).EnsureSuccessStatusCode();
         (await client.PostAsJsonAsync("/groups", group2)).EnsureSuccessStatusCode();
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
-        doc.RootElement.GetArrayLength().Should().Be(2);
-
-        var names = doc.RootElement.EnumerateArray()
-            .Select(e => e.GetProperty("name").GetString())
-            .ToList();
+        result.Should().NotBeNull();
+        result!.Should().HaveCount(2);
+        var names = result!.Select(g => g.Name).ToList();
         names.Should().Contain("Group One");
         names.Should().Contain("Group Two");
     }
@@ -132,19 +124,19 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — User A creates a group; User B should not see it
         var clientA = await CreateAuthClientAsync("usera_nogroup@example.com", "UserA123!");
-        var createRequest = new { name = "A's Private Group", currency = "EUR" };
+        var createRequest = new CreateGroupRequest("A's Private Group", "EUR");
         (await clientA.PostAsJsonAsync("/groups", createRequest)).EnsureSuccessStatusCode();
 
         var clientB = await CreateAuthClientAsync("userb_nogroup@example.com", "UserB123!");
 
         // Act
         var response = await clientB.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.GetArrayLength().Should().Be(0);
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
     }
 
     [Fact]
@@ -152,11 +144,10 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — user creates a group, then we manually set RemovedAt on their membership
         var client = await CreateAuthClientAsync("removed@example.com", "Removed123!");
-        var createRequest = new { name = "Removed Group", currency = "USD" };
+        var createRequest = new CreateGroupRequest("Removed Group", "USD");
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
-        var createBody = await createResponse.Content.ReadAsStringAsync();
-        var createDoc = JsonDocument.Parse(createBody);
-        var groupId = Guid.Parse(createDoc.RootElement.GetProperty("id").GetString()!);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = createResult!.Id;
 
         // Get the user's ID from the DB
         using var scope = _factory.Services.CreateScope();
@@ -173,12 +164,12 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.GetArrayLength().Should().Be(0);
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
     }
 
     [Fact]
@@ -186,29 +177,26 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — user creates a group
         var client = await CreateAuthClientAsync("fields@example.com", "Fields123!");
-        var createRequest = new { name = "Field Test Group", currency = "JPY" };
+        var createRequest = new CreateGroupRequest("Field Test Group", "JPY");
         (await client.PostAsJsonAsync("/groups", createRequest)).EnsureSuccessStatusCode();
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        var firstItem = doc.RootElement[0];
+        result.Should().NotBeNull();
+        var firstItem = result![0];
 
         // Must contain id
-        firstItem.TryGetProperty("id", out var id).Should().BeTrue();
-        Guid.Parse(id.GetString()!).Should().NotBe(Guid.Empty);
+        firstItem.Id.Should().NotBe(Guid.Empty);
 
         // Must contain name
-        firstItem.TryGetProperty("name", out var name).Should().BeTrue();
-        name.GetString().Should().Be("Field Test Group");
+        firstItem.Name.Should().Be("Field Test Group");
 
         // Must contain currency
-        firstItem.TryGetProperty("currency", out var currency).Should().BeTrue();
-        currency.GetString().Should().Be("JPY");
+        firstItem.Currency.Should().Be("JPY");
     }
 
     [Fact]
@@ -216,11 +204,10 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange — user creates a group, then we manually set ArchivedAt
         var client = await CreateAuthClientAsync("archived@example.com", "Archived123!");
-        var createRequest = new { name = "Archived Group", currency = "CHF" };
+        var createRequest = new CreateGroupRequest("Archived Group", "CHF");
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
-        var createBody = await createResponse.Content.ReadAsStringAsync();
-        var createDoc = JsonDocument.Parse(createBody);
-        var groupId = Guid.Parse(createDoc.RootElement.GetProperty("id").GetString()!);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = createResult!.Id;
 
         // Set ArchivedAt on the group
         using var scope = _factory.Services.CreateScope();
@@ -232,11 +219,11 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var body = await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var doc = JsonDocument.Parse(body);
-        doc.RootElement.GetArrayLength().Should().Be(0);
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
     }
 }

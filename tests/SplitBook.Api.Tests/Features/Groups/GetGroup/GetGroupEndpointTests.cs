@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using SplitBook.Api.Domain;
+using SplitBook.Api.Features.Auth.Register;
+using SplitBook.Api.Features.Groups.GetGroup;
+using SplitBook.Api.Features.Groups.ListMyGroups;
 using SplitBook.Api.Infrastructure.Persistence;
 using SplitBook.Api.Tests.Infrastructure;
 using Xunit;
@@ -52,7 +55,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupCreateDto>();
+        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -84,7 +87,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var registerResponse = await client.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterDto>();
+        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
         registerBody.Should().NotBeNull();
         var creatorUserId = registerBody!.Id;
 
@@ -101,7 +104,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupCreateDto>();
+        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -124,7 +127,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await clientA.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupCreateDto>();
+        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -181,7 +184,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await clientA.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupCreateDto>();
+        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -194,7 +197,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var registerResponse = await clientB.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterDto>();
+        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
         registerBody.Should().NotBeNull();
         var userIdB = registerBody!.Id;
 
@@ -241,16 +244,4 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         body.Title.Should().NotBeNullOrEmpty("Problem+JSON must include a 'title' field");
         body.Status.Should().Be(404, "Problem+JSON 'status' must match the HTTP status code");
     }
-
-    // --- Test-local DTOs ---
-
-    internal record RegisterDto(Guid Id, string Email, string DisplayName);
-
-    internal record GroupCreateDto(Guid Id, string Name, string Currency, string CreatedAt);
-
-    internal record GroupDetailDto(Guid Id, string Name, string Currency, DateTimeOffset CreatedAt, MemberDto[] Members);
-
-    internal record MemberDto(Guid UserId, string DisplayName);
-
-    internal record ProblemDetailsDto(string? Type, string? Title, int? Status);
 }

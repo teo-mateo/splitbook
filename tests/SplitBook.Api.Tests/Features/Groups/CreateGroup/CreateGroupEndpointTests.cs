@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SplitBook.Api.Domain;
+using SplitBook.Api.Features.Auth.Login;
+using SplitBook.Api.Features.Auth.Register;
+using SplitBook.Api.Features.Groups.CreateGroup;
+using SplitBook.Api.Features.Groups.ListMyGroups;
 using SplitBook.Api.Infrastructure.Persistence;
 using SplitBook.Api.Tests.Infrastructure;
 using Xunit;
@@ -28,18 +31,16 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
 
         // Register
-        var registerRequest = new { email, displayName = "TestUser", password };
+        var registerRequest = new RegisterRequest(email, "TestUser", password);
         var registerResponse = await client.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
         // Login
-        var loginRequest = new { email, password };
+        var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginBody = await loginResponse.Content.ReadAsStringAsync();
-        var loginDoc = JsonDocument.Parse(loginBody);
-        var accessToken = loginDoc.RootElement.GetProperty("accessToken").GetString();
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
 
-        return accessToken!;
+        return loginResult!.AccessToken;
     }
 
     /// <summary>
@@ -58,28 +59,19 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange
         var client = await CreateAuthClientAsync("creategroup@example.com", "GroupPass123!");
-        var request = new { name = "Lisbon Trip", currency = "EUR" };
+        var request = new CreateGroupRequest("Lisbon Trip", "EUR");
 
         // Act
         var response = await client.PostAsJsonAsync("/groups", request);
-        var body = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
+        var result = await response.Content.ReadFromJsonAsync<GroupDto>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        root.TryGetProperty("id", out var id).Should().BeTrue();
-        Guid.Parse(id.GetString()!).Should().NotBe(Guid.Empty);
-
-        root.TryGetProperty("name", out var name).Should().BeTrue();
-        name.GetString().Should().Be("Lisbon Trip");
-
-        root.TryGetProperty("currency", out var currency).Should().BeTrue();
-        currency.GetString().Should().Be("EUR");
-
-        root.TryGetProperty("createdAt", out var createdAt).Should().BeTrue();
-        createdAt.GetString().Should().NotBeNullOrEmpty();
+        result.Should().NotBeNull();
+        result!.Id.Should().NotBe(Guid.Empty);
+        result.Name.Should().Be("Lisbon Trip");
+        result.Currency.Should().Be("EUR");
+        result.CreatedAt.Should().NotBe(default);
     }
 
     [Fact]
@@ -87,13 +79,12 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
     {
         // Arrange
         var client = await CreateAuthClientAsync("membership@example.com", "MemberPass123!");
-        var request = new { name = "Roommates", currency = "GBP" };
+        var request = new CreateGroupRequest("Roommates", "GBP");
 
         // Act
         var response = await client.PostAsJsonAsync("/groups", request);
-        var body = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(body);
-        var groupId = Guid.Parse(doc.RootElement.GetProperty("id").GetString()!);
+        var result = await response.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = result!.Id;
 
         // Assert — response succeeded
         response.StatusCode.Should().Be(HttpStatusCode.Created);
