@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using SplitBook.Api.Domain;
+using SplitBook.Api.Features.Groups.ListMyGroups;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 
@@ -7,7 +8,7 @@ namespace SplitBook.Api.Features.Groups.CreateGroup;
 
 public static class CreateGroupHandler
 {
-    public static async Task<Results<Created<CreateGroupResponse>, ProblemHttpResult>> HandleAsync(
+    public static async Task<Results<Created<GroupDto>, ProblemHttpResult>> HandleAsync(
         CreateGroupRequest request,
         HttpContext httpContext,
         CurrentUserAccessor currentUserAccessor,
@@ -50,7 +51,7 @@ public static class CreateGroupHandler
 
         return TypedResults.Created(
             $"/groups/{group.Id}",
-            new CreateGroupResponse(group.Id, group.Name, group.Currency, group.CreatedAt)
+            new GroupDto(group.Id, group.Name, group.Currency, group.CreatedAt)
         );
     }
 }
