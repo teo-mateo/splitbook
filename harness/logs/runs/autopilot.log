@@ -22,3 +22,4 @@
 2026-04-23T16:08:00+02:00 CASE B — slice 4.1 complete (already committed by primary as b17511a); 40/40 tests green; no additional action needed
 2026-04-23T16:57:05+02:00 CASE A — slice 5 retry #3 on Qwen3.5-122B-A10B-Q4 (llama.cpp); fresh TUI session, spec-auditor running; config changes staged in worktree (not yet committed)
 2026-04-23T17:09:14+02:00 CASE D — added L-H11 (homogeneity rule) to LESSONS.md + reviewer.md consistency-check section and checklist item; hypothesis: reviewer will flag exception-based error handling / IResult returns / try-catch endpoint shims starting slice 6
+2026-04-23T17:40:42+02:00 CASE D — reviewer permission allowlist expanded (grep/rg/find/cat/head/tail/wc/sort/jq/ls/stat + git status*/show*/blame*/ls-files*). Observed in slice 5 review: reviewer blocked on cd-prefixed and pipe-suffixed git log, grep, dotnet test | tail — had to read files one at a time, couldn't verify L-H2 via git log.

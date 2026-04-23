@@ -12,9 +12,32 @@ permission:
     "*": deny
     "git diff*": allow
     "git log*": allow
-    "git status": allow
+    "git show*": allow
+    "git blame*": allow
+    "git status*": allow
+    "git ls-files*": allow
     "dotnet test*": allow
     "dotnet build*": allow
+    "dotnet restore*": allow
+    "grep *": allow
+    "rg *": allow
+    "find *": allow
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
+    "wc *": allow
+    "ls*": allow
+    "stat *": allow
+    "awk *": allow
+    "sed *": allow
+    "diff *": allow
+    "sort *": allow
+    "uniq *": allow
+    "xargs *": allow
+    "basename *": allow
+    "dirname *": allow
+    "jq *": allow
+    "pwd": allow
 ---
 
 You are the **reviewer** for the SplitBook project. You verify that what the primary built matches the spec and obeys the lessons. You do not write or edit code.
