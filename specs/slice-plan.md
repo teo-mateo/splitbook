@@ -14,7 +14,6 @@ If you feel a slice is growing to three endpoints, split it.
 |---|-------|---------------------|------------|
 | 0 | **Bootstrap** — solution, Api project, Tests project, `GET /health`, CI script | `GET /health` | `/health` returns 200 in an integration test; `dotnet build -warnaserror` clean |
 | 1 | **Auth — Register + Login** (two coupled: share JWT infra, DbContext, password hashing) | `POST /auth/register`, `POST /auth/login` | Can register then login and receive a JWT; protected endpoint returns 401 without token |
-| 1.1 | **Patch — Database initialization + smoke test** | No new endpoint. Make `dotnet run` produce a working API on a fresh file system (create `Users` table at startup), and add a smoke-test script that proves it end-to-end. | See "Slice 1.1 — special shape" below. |
 | 2 | **Groups — Create** | `POST /groups` | Creator becomes a member; response includes id + currency |
 | 3 | **Groups — List my groups** | `GET /groups` | Caller sees groups they belong to, not others' |
 | 4 | **Groups — Detail** | `GET /groups/{id}` | Returns members; 404 when caller is not a member (not 403 — see technical-spec §5) |
@@ -31,40 +30,6 @@ If you feel a slice is growing to three endpoints, split it.
 | 15 | **Settlements — List** | `GET /groups/{groupId}/settlements` | Ordered newest first |
 | 16 | **Simplified debts** — `DebtSimplifier` + endpoint | `GET /groups/{groupId}/simplified-debts` | Produces ≤ N−1 transfers for N non-zero members; full product-spec §8 e2e passes |
 | 17 | **User summary** | `GET /users/me/summary` | Sum across all groups; matches per-group balances |
-
-## Slice 1.1 — special shape (patch slice, no unit tests)
-
-Slice 1's 16 passing xUnit tests hid a production bug: `AppFactory.cs` calls `EnsureCreatedAsync()` before every test class, but `Program.cs` does not, so a fresh `dotnet run` hits `SqliteException: 'no such table: Users'` on the first request. This slice fixes that — but unit tests can't catch this category of failure (they're what caused the gap), so this slice uses a **different** definition of done.
-
-### What to build
-
-1. **Database schema at startup.** Either:
-   - Quick path: call `db.Database.EnsureCreated()` in `Program.cs` on startup (dev-appropriate; fine for v1).
-   - Proper path: add an EF migration via `dotnet ef migrations add InitialCreate` in `src/SplitBook.Api`, commit it into `Infrastructure/Persistence/Migrations/`, and call `Database.Migrate()` at startup. Matches technical-spec §6.
-
-   Pick one. Document the choice in `DECISIONS.md` as `D-04` with the rationale. Either is acceptable. Do not do both.
-
-2. **Smoke-test script** at `scripts/smoke.sh` that:
-   - Removes any existing `src/SplitBook.Api/splitbook.db`.
-   - Starts the API in the background on a known port (e.g. `127.0.0.1:5080`), capturing logs to `/tmp/api.log`.
-   - Waits for `/health` to return 200 (timeout 30s).
-   - `POST /auth/register` with a test user → asserts HTTP 201.
-   - `POST /auth/login` with the same credentials → asserts HTTP 200, extracts the JWT.
-   - `GET /groups/` without a token → asserts HTTP 401.
-   - `GET /groups/` with the JWT → asserts HTTP 200.
-   - Kills the API, cleans up the DB file.
-   - Exits 0 on all-pass, non-zero with a clear message on any failure.
-
-### Protocol differences vs normal slices
-
-- **Skip `@test-writer`.** No xUnit tests this slice. The smoke script is the test.
-- Primary writes `scripts/smoke.sh` + the startup fix.
-- `@reviewer` verifies: (a) smoke script is present and executable, (b) `bash scripts/smoke.sh` exits 0 from a clean state, (c) the startup change is minimal and does not touch code outside `Program.cs` + optionally `Infrastructure/Persistence/Migrations/`.
-- `@lessons-scribe` should probably produce one lesson from this slice: "tests pass, prod broken" is now a known category we need to guard against in future slices.
-
-### DoD
-
-`bash scripts/smoke.sh` exits 0 against a fresh filesystem. The 16 existing xUnit tests still pass. The diff touches only: `Program.cs`, `scripts/smoke.sh` (new), `DECISIONS.md`, and — if the proper path was chosen — files under `Infrastructure/Persistence/Migrations/` and a one-line package reference. Anything else is out of scope.
 
 ## Notes for the implementer
 
