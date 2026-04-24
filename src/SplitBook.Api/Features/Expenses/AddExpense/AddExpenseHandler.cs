@@ -69,17 +69,39 @@ public static class AddExpenseHandler
         }
 
         // Parse split method
-        if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod) || splitMethod != SplitMethod.Equal)
+        if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod) ||
+            (splitMethod != SplitMethod.Equal && splitMethod != SplitMethod.Exact))
         {
             return TypedResults.Problem(title: "Unsupported Split Method", statusCode: 400);
         }
 
-        // Collect all user IDs that need membership checks
-        var participantUserIds = request.Splits.Select(s => s.UserId).ToHashSet();
-        if (!participantUserIds.Contains(request.PayerUserId))
+        // For Exact split, validate that each participant has an amount and that they sum to the total
+        if (splitMethod == SplitMethod.Exact)
         {
-            participantUserIds.Add(request.PayerUserId);
+            foreach (var split in request.Splits)
+            {
+                if (!split.AmountMinor.HasValue || split.AmountMinor < 0)
+                {
+                    return TypedResults.Problem(
+                        title: "Validation Failed",
+                        detail: "Each participant must have a non-negative amountMinor for Exact split",
+                        statusCode: 400);
+                }
+            }
+
+            var splitSum = request.Splits.Sum(s => s.AmountMinor!.Value);
+            if (splitSum != request.AmountMinor)
+            {
+                return TypedResults.Problem(
+                    title: "Validation Failed",
+                    detail: $"Sum of participant amounts ({splitSum}) must equal the expense total ({request.AmountMinor})",
+                    statusCode: 400);
+            }
         }
+
+        // Collect all user IDs that need membership checks (always include payer)
+        var participantUserIds = request.Splits.Select(s => s.UserId).ToHashSet();
+        participantUserIds.Add(request.PayerUserId);
 
         // Batch-load active memberships for this group and these users
         var activeMemberships = await context.Memberships
@@ -103,7 +125,7 @@ public static class AddExpenseHandler
             }
         }
 
-        // Calculate equal split
+        // Build expense entity
         var expense = new Expense
         {
             Id = Guid.NewGuid(),
@@ -120,7 +142,12 @@ public static class AddExpenseHandler
 
         context.Expenses.Add(expense);
 
-        var splits = CalculateEqualSplit(request, expense.Id);
+        var splits = splitMethod switch
+        {
+            SplitMethod.Equal => CalculateEqualSplit(request, expense.Id),
+            SplitMethod.Exact => CalculateExactSplit(request, expense.Id),
+            _ => throw new InvalidOperationException($"Unhandled split method: {splitMethod}")
+        };
         context.ExpenseSplits.AddRange(splits);
         await context.SaveChangesAsync();
 
@@ -143,6 +170,22 @@ public static class AddExpenseHandler
                 ExpenseId = expenseId,
                 UserId = participantSplit.UserId,
                 AmountMinor = amount,
+            });
+        }
+
+        return splits;
+    }
+
+    private static List<ExpenseSplit> CalculateExactSplit(AddExpenseRequest request, Guid expenseId)
+    {
+        var splits = new List<ExpenseSplit>(request.Splits.Count);
+        foreach (var split in request.Splits)
+        {
+            splits.Add(new ExpenseSplit
+            {
+                ExpenseId = expenseId,
+                UserId = split.UserId,
+                AmountMinor = split.AmountMinor!.Value,
             });
         }
 

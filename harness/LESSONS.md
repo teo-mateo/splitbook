@@ -84,10 +84,6 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** When a handler creates a child entity that references a parent (expense → group, settlement → group), validate that the child's properties are consistent with the parent's properties before persisting. Load the parent once and compare.
 - **Why:** The primary accepted any currency for the expense without checking it matched the group's currency. The product spec says "every group has one currency" — the handler should have loaded the group and compared. This pattern applies to any parent-child relationship where the child inherits or must match parent properties.
 
-### L-04: Document architectural decisions when the spec asks
-- **Observed in:** slice 0
-- **Lesson:** When `technical-spec.md` §9 lists open questions for the implementer to decide, the primary must document the decision in code comments or `DECISIONS.md` at the point it is made. Do not defer this to a later slice.
-- **Why:** The reviewer flagged that the health endpoint's location (minimal API vs. controller) was decided but not recorded. Undocumented decisions accumulate technical debt and make cross-slice consistency checks impossible.
 
 ### L-05: Use TypedResults.Problem() for ALL non-2xx error responses
 - **Observed in:** slice 1 (BadRequest), slice 4 (NotFound)
@@ -108,3 +104,8 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Observed in:** slice 6
 - **Lesson:** When `product-spec.md` and `technical-spec.md` (or `slice-plan.md`) say different things about the same behavior, STOP and surface the contradiction to the human. Do not pick a side and implement — even if one seems clearly right. Document the exact conflicting sections in the session log.
 - **Why:** Slice 6 found product-spec §5 saying archive is the escape hatch for non-zero-balance groups, while technical-spec §4 and slice-plan said archive "fails if any non-zero balance." The primary chose product-spec (correctly), but the harness principle is "spec is ground truth" — when ground truth splits, only the spec owner can resolve it. A silent choice risks implementing the wrong behavior and discovering it late.
+
+### L-11: Audit shared logic when extending existing handlers
+- **Observed in:** slice 8
+- **Lesson:** When extending an existing handler with a new code path (e.g., adding Exact split to an endpoint that already handles Equal split), identify every piece of shared logic that the new path must participate in — especially membership validation, authorization checks, and invariant enforcement. The new path must not bypass shared logic that existed for the original path.
+- **Why:** The payer membership check was broken for Exact split because the primary collected participant IDs from the splits list only, and Exact split doesn't require the payer to be in the splits list. The Equal split path auto-added the payer, but that was specific to Equal's split-building logic. The membership validation (shared across all split methods) should have always included the payer. This pattern applies whenever a handler gains a new variant — the shared scaffolding must be audited, not assumed.

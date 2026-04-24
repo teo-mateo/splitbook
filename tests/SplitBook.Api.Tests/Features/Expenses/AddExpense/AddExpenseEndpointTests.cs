@@ -408,6 +408,68 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
     }
 
     [Fact]
+    public async Task AddExpense_ExactSplit_SumsToTotal_Returns201()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("exact_split_user_a@example.com", "ExactPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("exact_split_user_b@example.com", "ExactPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Exact Split Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("exact_split_user_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 6000; A owes 4000, B owes 2000 (sum = 6000)
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            6000,
+            "EUR",
+            "Exact split dinner",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, 4000, null, null),
+                new ExpenseSplitRequest(userIdB, 2000, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Exact");
+        result.Splits.Should().HaveCount(2);
+
+        // Assert — exact amounts in response (identify by userId, not positional)
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        splitA.AmountMinor.Should().Be(4000, "user A exact share should be 4000");
+        splitB.AmountMinor.Should().Be(2000, "user B exact share should be 2000");
+
+        // Assert — database has ExpenseSplit rows with exact amounts
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(2);
+        var dbSplitA = dbSplits.Single(es => es.UserId == userIdA);
+        var dbSplitB = dbSplits.Single(es => es.UserId == userIdB);
+        dbSplitA.AmountMinor.Should().Be(4000);
+        dbSplitB.AmountMinor.Should().Be(2000);
+    }
+
+    [Fact]
     public async Task AddExpense_PayerNotMemberOfGroup_Returns400()
     {
         // Arrange — register user A (group creator) and user B (not added to group)
@@ -444,5 +506,225 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
         problem.Should().NotBeNull();
         problem!.Status.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task AddExpense_ExactSplit_SumDoesNotMatchTotal_Returns400()
+    {
+        // Arrange — register user A, create a group
+        var (client, userIdA) = await CreateAuthClientAsync("exact_split_sum_user@example.com", "ExactSumPass123!");
+        var createGroupRequest = new CreateGroupRequest("Exact Sum Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        // Total = 6000 but splits sum to 5000 (3000 + 2000) — mismatch
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            6000,
+            "EUR",
+            "Exact split sum mismatch",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, 3000, null, null),
+                new ExpenseSplitRequest(userIdA, 2000, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+
+        // Assert — 400 Bad Request
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "exact split amounts must sum to the expense total");
+
+        // Assert — Problem+JSON shape
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
+        problem.Should().NotBeNull();
+        problem!.Type.Should().NotBeNull();
+        problem.Title.Should().NotBeNull();
+        problem.Status.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task AddExpense_ExactSplit_NullAmountMinor_Returns400()
+    {
+        // Arrange — register user A, create a group
+        var (client, userIdA) = await CreateAuthClientAsync("exact_split_null_user@example.com", "ExactNullPass123!");
+        var createGroupRequest = new CreateGroupRequest("Exact Null Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        // Total = 6000 but the single split has AmountMinor = null — invalid for Exact split
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            6000,
+            "EUR",
+            "Exact split with null amount",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+
+        // Assert — 400 Bad Request
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "exact split requires non-null AmountMinor for each participant");
+
+        // Assert — Problem+JSON shape
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
+        problem.Should().NotBeNull();
+        problem!.Type.Should().NotBeNull();
+        problem.Title.Should().NotBeNull();
+        problem.Status.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task AddExpense_ExactSplit_ResponseContainsSplitMethodAndSplits()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("exact_response_user_a@example.com", "ExactRespPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("exact_response_user_b@example.com", "ExactRespPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Exact Response Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("exact_response_user_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 10000; A owes 6000, B owes 4000
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Exact split response test",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, 6000, null, null),
+                new ExpenseSplitRequest(userIdB, 4000, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+
+        // Assert — response contains splitMethod "Exact"
+        result!.SplitMethod.Should().Be("Exact");
+
+        // Assert — splits array has 2 entries with correct userIds and amountMinors
+        result.Splits.Should().HaveCount(2);
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        splitA.AmountMinor.Should().Be(6000, "user A exact share should be 6000");
+        splitB.AmountMinor.Should().Be(4000, "user B exact share should be 4000");
+    }
+
+    [Fact]
+    public async Task AddExpense_ExactSplit_DatabaseStoresExactAmounts()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("exact_db_a@example.com", "ExactDbPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("exact_db_b@example.com", "ExactDbPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Exact DB Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("exact_db_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 7500; A owes 5000, B owes 2500 — exact amounts, no division needed
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            7500,
+            "EUR",
+            "Exact split database test",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, 5000, null, null),
+                new ExpenseSplitRequest(userIdB, 2500, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Exact");
+
+        // Assert — database ExpenseSplit rows contain the exact AmountMinor values from the request
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(2);
+
+        var dbSplitA = dbSplits.Single(es => es.UserId == userIdA);
+        var dbSplitB = dbSplits.Single(es => es.UserId == userIdB);
+        dbSplitA.AmountMinor.Should().Be(5000, "Exact split stores the exact amountMinor from the request — no division or redistribution");
+        dbSplitB.AmountMinor.Should().Be(2500, "Exact split stores the exact amountMinor from the request — no division or redistribution");
+    }
+
+    [Fact]
+    public async Task AddExpense_ExactSplit_SingleParticipant_Returns201()
+    {
+        // Arrange — register user A, create a group (A is the only member)
+        var (client, userIdA) = await CreateAuthClientAsync("exact_single_user@example.com", "ExactSinglePass123!");
+        var createGroupRequest = new CreateGroupRequest("Exact Single Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        // Total = 5000; single participant (user A) owes the full 5000
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            5000,
+            "EUR",
+            "Exact split single participant",
+            DateOnly.Parse("2024-01-15"),
+            "Exact",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, 5000, null, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Exact");
+        result.Splits.Should().HaveCount(1);
+        result.Splits[0].AmountMinor.Should().Be(5000, "single participant exact split should have the full amount");
     }
 }
