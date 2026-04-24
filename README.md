@@ -1,66 +1,65 @@
-# 30-app-benchmark — SplitBook under a local-model harness
+# SplitBook
 
-An experiment: can Qwen3.6-27B-FP8, running on a self-hosted vLLM endpoint and driven by **opencode**, build a medium-sized C#/.NET REST API correctly, under a subagent-based harness with persistent curated "lessons" memory?
+A lightweight REST API for tracking shared group expenses. Think of it as the backend behind a Splitwise-style app: friends, roommates, or travel buddies record who paid for what, and the server keeps a running picture of who owes whom.
 
-The app being built is **SplitBook**, a group-expense tracker (Splitwise-lite). The code is the side effect; the harness and the lessons data are the deliverable.
+## What it does
 
-## Layout
+- **Groups** — named collections (e.g. "Lisbon Trip"), each with its own currency and members.
+- **Expenses** — one member pays, any subset splits the cost. Four split modes:
+  - **Equal** — divide evenly across participants
+  - **Exact** — each participant's amount is set explicitly; must sum to the total
+  - **Percentage** — percentages must sum to 100
+  - **Shares** — integer shares, cost split proportionally
+- **Settlements** — record a direct payment from one member to another; moves the balances.
+- **Balances** — derived per member per group. Invariant: they always sum to zero.
+- **Simplified debts** — collapse a tangle of pairwise balances into the minimum set of transfers that clears them.
+
+## Tech
+
+- .NET 8 / C# minimal APIs
+- EF Core + SQLite (file-based)
+- JWT bearer auth (24h access tokens)
+- FluentValidation for request shapes
+- xUnit + FluentAssertions for tests, `WebApplicationFactory` for integration tests
+- RFC 7807 Problem+JSON for all non-2xx responses
+- `Idempotency-Key` support on `POST /expenses` and `POST /settlements`
+- OpenAPI / Swagger UI at `/swagger` in development
+
+## Project layout
 
 ```
-specs/
-  product-spec.md        # what SplitBook does, business rules, screens
-  technical-spec.md      # stack, solution layout, domain, REST contract, test strategy
-  slice-plan.md          # ordered vertical slices, one per session
-harness/
-  README.md              # iteration loop, subagent roles, oversight protocol
-  LESSONS.md             # curated, capped, lessons-scribe-only (+ [HUMAN] entries)
-  logs/                  # one session log per slice
-.opencode/
-  agent/                 # spec-auditor, test-writer, reviewer, lessons-scribe
-  command/               # slash commands (e.g. /next-slice)
-opencode.json            # provider (vLLM at heapzilla), model, permissions, instructions
+src/
+  SplitBook.Api/            ASP.NET Core minimal-API host, Features/ folders per slice
+  SplitBook.Domain/         Pure-logic bits (balance calc, debt simplifier)
+  SplitBook.Infrastructure/ EF Core, JWT services
+tests/
+  SplitBook.Api.Tests/      Integration tests
+  SplitBook.Domain.Tests/   Unit tests for the pure stuff
+specs/                      Product + technical spec, slice plan
 ```
 
-## Prerequisites
-
-- opencode installed (`npm i -g opencode-ai` or via their installer — check opencode.ai/docs).
-- .NET 8 SDK.
-- Env var set:
-
-  ```bash
-  export HEAPZILLA_API_KEY=llmd-...
-  ```
-
-## Running it
+## Running
 
 ```bash
-cd 30-app-benchmark
-opencode          # pick up opencode.json automatically
-> /next-slice     # in the opencode prompt
+dotnet test                          # full suite
+cd src/SplitBook.Api && dotnet run   # starts on http://localhost:5124 by default
 ```
 
-The slash command points the primary agent at the protocol in `harness/README.md` and it will invoke subagents as specified there.
+Swagger UI is at `http://localhost:5124/swagger` when running in Development.
 
-## Your job as operator
+## Status
 
-Between slices, follow the protocol in `harness/README.md` §4:
-1. Read the diff.
-2. Read `harness/LESSONS.md` — is the scribe distilling or just narrating?
-3. Read `harness/logs/slice-NN.md`.
-4. If needed, inject a `[HUMAN]` line into LESSONS.md, amend a spec, or tighten a subagent prompt. Then release the next slice.
+Work in progress — built slice by slice against a fixed plan in `specs/slice-plan.md`. Each slice is a single vertical feature (register/login, create group, add expense, etc.) with its own integration tests. Balances-sum-to-zero and "soft-delete only" are invariants the test suite enforces on every slice.
 
-## The specs are fixed — the harness is not
+## Out of scope
 
-Expect the specs to stay stable across the experiment (that's the point — the model is graded against a fixed target). Expect `harness/` to evolve: prompts get tightened, subagents get added or merged, LESSONS.md grows and is pruned. Keep track of these changes — they *are* the experiment's findings.
+- Multi-currency FX / cross-currency expenses
+- Receipt uploads, comments, reactions
+- Push notifications or email
+- OAuth / social login
+- Real-time sync / websockets
+- Multi-tenant or organization accounts
 
-## What we are measuring
+## License
 
-For each slice, from `harness/logs/slice-NN.md`:
-- reviewer rounds to reach pass (ideal: 1)
-- reviewer finding severities (blocker/major/minor/nit)
-- out-of-scope edits caught
-- invariants missed
-- whether the slice's initial message cited applicable lessons, and whether the implementation honored them
-- human interventions and their shape
-
-A harness that works for this model will show these numbers improving across slices as LESSONS.md matures.
+MIT.
