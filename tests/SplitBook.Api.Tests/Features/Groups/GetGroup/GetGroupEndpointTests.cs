@@ -71,8 +71,8 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         body.Currency.Should().Be("EUR");
         body.Members.Should().NotBeEmpty();
         body.Members.Should().HaveCount(1);
-        body.Members[0].UserId.Should().NotBe(Guid.Empty);
-        body.Members[0].DisplayName.Should().Be("TestUser");
+        body.Members.Single().UserId.Should().NotBe(Guid.Empty);
+        body.Members.Single().DisplayName.Should().Be("TestUser");
     }
 
     [Fact]

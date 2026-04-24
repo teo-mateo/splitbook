@@ -6,6 +6,8 @@ using SplitBook.Api.Features.Auth.Register;
 using SplitBook.Api.Features.Groups.CreateGroup;
 using SplitBook.Api.Features.Groups.ListMyGroups;
 using SplitBook.Api.Features.Groups.GetGroup;
+using SplitBook.Api.Features.Groups.AddMember;
+using SplitBook.Api.Features.Groups.RemoveMember;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +68,8 @@ try
     groups.MapListMyGroups();
     groups.MapCreateGroup();
     groups.MapGetGroup();
+    groups.MapAddMember();
+    groups.MapRemoveMember();
 
     app.Run();
     return 0;
