@@ -80,6 +80,13 @@
     },
     "bash": {
       "dotnet *": "allow",
+      "DOTNET_*=* *": "allow",
+      "ASPNETCORE_*=* *": "allow",
+      "scripts/app.sh*": "allow",
+      "./scripts/app.sh*": "allow",
+      "bash scripts/app.sh*": "allow",
+      "bash ./scripts/app.sh*": "allow",
+      "sh scripts/app.sh*": "allow",
       "git diff*": "allow",
       "git status*": "allow",
       "git log*": "allow",

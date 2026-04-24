@@ -34,3 +34,15 @@ Until that slice lands, `SplitBook.Domain.Tests/` stays a folder inside `tests/S
 Use `db.Database.EnsureCreated()` in `Program.cs` after `builder.Build()`, wrapped in a scoped service resolution. No EF migrations for v1.
 
 **Rationale:** Slice 1.1's goal is minimal repair of the "tests green, prod broken" startup bug. `EnsureCreated()` is one line, requires no EF CLI tooling, no migration files, and no `.csproj` changes. The technical-spec §6 explicitly allows simplifications for v1. If schema evolution requires versioned migrations later, we can migrate to `Database.Migrate()` then and document the follow-up decision.
+
+## D-05: OpenAPI/Swagger — Swashbuckle.AspNetCore 6.9.0
+
+Use `Swashbuckle.AspNetCore` (v6.9.0) for OpenAPI spec generation and Swagger UI. Not NSwag (heavier) and not both. Gated behind `app.Environment.IsDevelopment()` so the spec is only served in development environments.
+
+Key wiring:
+- `AddEndpointsApiExplorer()` is called before `AddSwaggerGen()` so minimal API routes are discovered.
+- A Bearer/JWT security scheme is declared globally so the Swagger UI shows an "Authorize" button.
+- Middleware (`UseSwagger()` + `UseSwaggerUI()`) is placed after `UseAuthentication()`/`UseAuthorization()`.
+- The OpenAPI JSON spec is available at `/swagger/v1/swagger.json`.
+
+**Rationale:** Swashbuckle is the lower-friction choice for .NET 8, sufficient for v1. The spec (slice 5.1) allows either Swashbuckle or NSwag; Swashbuckle requires fewer configuration lines and has a smaller dependency footprint.

@@ -22,7 +22,7 @@ If you want generic search across the repo, use `grep`/`rg`/`find`/`Read` direct
 1. Read `harness/LESSONS.md` in full and paraphrase the entries relevant to this slice in your first message. Don't skip, don't skim.
 2. Invoke `@spec-auditor` for acceptance criteria.
 3. For EACH criterion in order: invoke `@test-writer` with that single criterion → it returns one failing test → write the minimum production code to turn it green → next criterion. Never ask `@test-writer` for "all tests" in one shot (L-H8).
-4. After all criteria pass: run `dotnet test` full suite (no filter), then `dotnet run` + `curl` smoke the new endpoint against a fresh filesystem (L-H7). Green tests ≠ working app.
+4. After all criteria pass: run `dotnet test` full suite (no filter), then `scripts/app.sh smoke` for the L-H7 fresh-filesystem smoke test (it handles reset + start + /health + /swagger + stop in one call). Never run `dotnet run &` directly — opencode's Bash tool doesn't detach cleanly and you'll hang for 120s. See the `app-lifecycle` skill. Green tests ≠ working app.
 5. Invoke `@reviewer`. Address findings. Max 3 rounds per slice.
 6. Invoke `@lessons-scribe`. Write `harness/logs/slice-NN.md` with the session summary.
 
