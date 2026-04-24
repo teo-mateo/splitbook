@@ -19,6 +19,7 @@ If you feel a slice is growing to three endpoints, split it.
 | 4 | **Groups — Detail** | `GET /groups/{id}` | Returns members; 404 when caller is not a member (not 403 — see technical-spec §5) |
 | 4.1 | **Patch — Share DTOs between API and tests** | No new endpoint, no new tests. Make all API request/response DTOs `public`, have the tests project reference them via the existing project reference, and remove every DTO record currently duplicated inside test files. | See "Slice 4.1 — special shape" below. |
 | 5 | **Groups — Add + remove member** (two coupled: share membership lifecycle) | `POST /groups/{id}/members`, `DELETE /groups/{id}/members/{userId}` | Lookup by email on add; remove fails if non-zero balance exists (stub — made real in slice 11) |
+| 5.1 | **Patch — Add Swagger/OpenAPI** | No new endpoint. Add `NSwag.AspNetCore` (or `Swashbuckle.AspNetCore`) to generate an OpenAPI spec and serve the Swagger UI at `/swagger`. | `/swagger` returns 200 with a usable UI; all existing endpoints appear in the generated spec with correct auth scheme (Bearer/JWT); `dotnet test` green with zero regressions. |
 | 6 | **Groups — Archive** | `POST /groups/{id}/archive` | Fails on non-zero balance |
 | 7 | **Expenses — Add (Equal split only)** | `POST /groups/{groupId}/expenses` with `splitMethod: "Equal"` | €60 equal split between 2 participants stores 2 `ExpenseSplit` rows of €30, sum = total, idempotency works |
 | 8 | **Expenses — Exact split** (extends slice 7, same endpoint) | `splitMethod: "Exact"` validation | Sum-of-amounts must equal total or 400 |
@@ -31,6 +32,50 @@ If you feel a slice is growing to three endpoints, split it.
 | 15 | **Settlements — List** | `GET /groups/{groupId}/settlements` | Ordered newest first |
 | 16 | **Simplified debts** — `DebtSimplifier` + endpoint | `GET /groups/{groupId}/simplified-debts` | Produces ≤ N−1 transfers for N non-zero members; full product-spec §8 e2e passes |
 | 17 | **User summary** | `GET /users/me/summary` | Sum across all groups; matches per-group balances |
+
+## Slice 5.1 — special shape (infrastructure slice, no new tests)
+
+This is a housekeeping slice that adds API documentation tooling. No new endpoints, no new tests.
+
+**Context:** This project targets .NET 8. The built-in `Microsoft.AspNetCore.OpenApi` methods (`AddOpenApi()` / `MapOpenApi()`) are .NET 9+ only and are not available. The choice is between `Swashbuckle.AspNetCore` (simpler, but no longer actively maintained) and `NSwag.AspNetCore` (actively maintained, but heavier). Either is acceptable; do not add both.
+
+### What to change
+
+1. **Pick a package.** `Swashbuckle.AspNetCore` is the lower-friction choice for .NET 8 and is sufficient for v1. `NSwag.AspNetCore` is acceptable if the primary prefers it. Do not add both. Do not use `Scalar.AspNetCore` — it's a UI layer on top of a spec generator and adds unnecessary complexity for this slice.
+
+2. **Add the package and wire it into `Program.cs`.** The Swagger UI must be served at `/swagger` (or `/swagger/index.html`). The OpenAPI JSON spec must be available at `/swagger/v1/swagger.json` (or the package's default path — document it).
+
+3. **Call `AddEndpointsApiExplorer()`.** This is required for minimal API routes to be discovered by the OpenAPI generator. Without it, no endpoints will appear in the spec. Register it on the service collection before the OpenAPI/Swagger services.
+
+4. **Configure the auth scheme.** The generated OpenAPI spec must declare a Bearer/JWT security scheme so the Swagger UI shows an "Authorize" button that accepts a token. Without this, the UI is useless for testing protected endpoints. The exact configuration depends on the chosen package:
+   - **Swashbuckle:** Add a `SecurityScheme` in `AddSwaggerGen()` and a global `SecurityRequirement`.
+   - **NSwag:** Configure security in `AddOpenApiDocument()`.
+
+5. **Middleware order.** The Swagger/OpenAPI middleware must be placed carefully in the pipeline:
+   - After authentication middleware (`app.UseAuthentication()`) so the security scheme is recognized.
+   - Before or at the same level as route mapping.
+   - For Swashbuckle: `app.UseSwagger()` then `app.UseSwaggerUI()`.
+   - For NSwag: `app.UseOpenApi()` then `app.UseSwaggerUi()`.
+
+6. **Do not break production startup.** `dotnet run` must still work. Consider gating Swagger behind `app.Environment.IsDevelopment()` — this is the conventional approach and keeps the spec out of production. If you gate it, document the choice.
+
+### Protocol differences vs normal slices
+
+- **Skip `@test-writer`** — no new tests.
+- Primary does the work directly.
+- Primary must run the full test suite and confirm **all pre-existing tests still pass**.
+- Primary must run `dotnet run` and smoke-test `curl http://localhost:<port>/swagger` (or the actual port) returns 200.
+- `@reviewer` verifies: (a) Swagger UI loads, (b) auth scheme is declared, (c) all endpoints through slice 5 are listed, (d) no behavioral changes to existing code, (e) tests are green.
+- `@lessons-scribe` may have nothing to add unless a packaging or wiring lesson emerges.
+
+### DoD
+
+- `dotnet test` green — all existing tests pass unchanged.
+- `dotnet run` starts cleanly.
+- `curl http://localhost:<port>/swagger` returns 200 with HTML content.
+- The OpenAPI JSON spec lists at least: `/health`, `/auth/register`, `/auth/login`, `/groups`, `/groups/{id}`, `/groups/{id}/members`, `/groups/{id}/members/{userId}`.
+- The OpenAPI spec declares a Bearer/JWT security scheme.
+- Diff touches `*.csproj` (one new package), `Program.cs` (middleware wiring), and nothing else.
 
 ## Slice 4.1 — special shape (refactor slice, no new tests)
 
