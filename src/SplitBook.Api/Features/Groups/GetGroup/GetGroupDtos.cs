@@ -5,6 +5,7 @@ public record GroupDetailDto(
     string Name,
     string Currency,
     DateTimeOffset CreatedAt,
+    DateTimeOffset? ArchivedAt,
     List<MemberDto> Members);
 
 public record MemberDto(

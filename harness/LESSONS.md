@@ -103,3 +103,8 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Observed in:** slice 2
 - **Lesson:** When using FluentValidation's `.Must()` on a string property, either precede it with a null guard (e.g., `.NotEmpty()`) or make the predicate itself null-safe (e.g., `.Must(val => val == null || val.Length == 3)`). Without a guard, `.Must()` receives `null` and throws `ArgumentNullException` during validation, which produces a 500 instead of a 400 with a proper error message. Prefer built-in rules like `.Length()`, `.RegularExpression()`, or `.NotEmpty()` when they express the constraint directly — they handle nulls gracefully.
 - **Why:** The primary wrote `.Must(currency => char.IsLetter(c) for all c)` on a string that could be null, causing a crash on empty input. The reviewer caught it, but every slice that uses FluentValidation with custom `.Must()` predicates on reference types will face the same trap.
+
+### L-08: When specs contradict, escalate — don't pick a side
+- **Observed in:** slice 6
+- **Lesson:** When `product-spec.md` and `technical-spec.md` (or `slice-plan.md`) say different things about the same behavior, STOP and surface the contradiction to the human. Do not pick a side and implement — even if one seems clearly right. Document the exact conflicting sections in the session log.
+- **Why:** Slice 6 found product-spec §5 saying archive is the escape hatch for non-zero-balance groups, while technical-spec §4 and slice-plan said archive "fails if any non-zero balance." The primary chose product-spec (correctly), but the harness principle is "spec is ground truth" — when ground truth splits, only the spec owner can resolve it. A silent choice risks implementing the wrong behavior and discovering it late.

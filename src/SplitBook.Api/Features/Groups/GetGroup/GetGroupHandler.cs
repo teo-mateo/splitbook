@@ -32,7 +32,7 @@ public static class GetGroupHandler
             .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new MemberDto(u.Id, u.DisplayName))
             .ToListAsync();
 
-        var dto = new GroupDetailDto(group.Id, group.Name, group.Currency, group.CreatedAt, members);
+        var dto = new GroupDetailDto(group.Id, group.Name, group.Currency, group.CreatedAt, group.ArchivedAt, members);
 
         return TypedResults.Ok(dto);
     }
