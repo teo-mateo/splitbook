@@ -74,15 +74,15 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** `test-writer` must actually run `dotnet test` and quote its output before returning, not just infer the red state from having written tests. `reviewer` must actually run `git diff` and `dotnet test` and quote their exit codes in its report. If a bash command comes back "invalid" or is unavailable, STOP and surface this — do not silently fall back to reading files and claim you've reviewed.
 - **Why:** In slice 0 the test-writer skipped `dotnet test` entirely and reviewer fell back to file-reading because bash was (incorrectly) disabled in the subagent configs. This broke the core L-01 safety signal. Verification must be explicit and visible in the transcript.
 
-### L-02: One slice's worth of files per session
-- **Observed in:** seed
-- **Lesson:** Do not touch files outside the current slice's feature folder except when explicitly adding an entity to `Domain/` or a migration to `Infrastructure/Persistence/Migrations/`. If you feel the urge, invoke `@reviewer` first.
-- **Why:** Out-of-scope edits are the #1 source of regressions when small models "help."
+### L-09: Batch validate collection membership in a single query
+- **Observed in:** slice 7
+- **Lesson:** When validating that multiple items belong to a collection (e.g., all expense participants are group members), issue ONE batch query using `Contains()` or a JOIN — never iterate and query per item.
+- **Why:** The primary wrote a loop that queried membership for each participant, producing an N+1 pattern. The fix was a single query checking all participant IDs at once. Every slice that validates "these users are all members of this group" will face the same trap.
 
-### L-03: Keep subagents within their mandate boundaries
-- **Observed in:** slice 0
-- **Lesson:** The `test-writer` subagent writes tests only. If the tests require scaffolding (e.g., Program.cs, appsettings, a DbContext), the primary must provide that scaffolding first. A subagent that writes production code outside its mandate will hallucinate APIs and force the primary to fix them before reaching red.
-- **Why:** In slice 0, `test-writer` wrote `Program.cs` with a non-existent Serilog API (`CreateBootstrapLogger`) and a missing NuGet package. The primary had to repair the scaffolding before the red state was even reachable.
+### L-10: Enforce cross-entity invariants in the handler
+- **Observed in:** slice 7
+- **Lesson:** When a handler creates a child entity that references a parent (expense → group, settlement → group), validate that the child's properties are consistent with the parent's properties before persisting. Load the parent once and compare.
+- **Why:** The primary accepted any currency for the expense without checking it matched the group's currency. The product spec says "every group has one currency" — the handler should have loaded the group and compared. This pattern applies to any parent-child relationship where the child inherits or must match parent properties.
 
 ### L-04: Document architectural decisions when the spec asks
 - **Observed in:** slice 0
