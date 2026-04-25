@@ -17,6 +17,7 @@ using SplitBook.Api.Features.Balances.GetGroupBalances;
 using SplitBook.Api.Features.Balances.GetSimplifiedDebts;
 using SplitBook.Api.Features.Settlements.RecordSettlement;
 using SplitBook.Api.Features.Settlements.ListSettlements;
+using SplitBook.Api.Features.Reports.GetUserSummary;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -119,6 +120,9 @@ try
     groups.MapGetSimplifiedDebts();
     groups.MapRecordSettlement();
     groups.MapListSettlements();
+
+    var users = app.MapGroup("/users").RequireAuthorization();
+    users.MapGetUserSummary();
 
     app.Run();
     return 0;
