@@ -18,5 +18,9 @@ public class RecordSettlementValidator : AbstractValidator<RecordSettlementReque
 
         RuleFor(x => x.ToUserId)
             .NotEmpty().WithMessage("ToUserId is required");
+
+        RuleFor(x => x.OccurredOn)
+            .Must(d => d != DateOnly.MinValue)
+            .WithMessage("OccurredOn must be a valid date");
     }
 }

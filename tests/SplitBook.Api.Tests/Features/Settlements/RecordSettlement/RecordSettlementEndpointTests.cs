@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using FluentAssertions;
 using SplitBook.Api.Features.Auth.Login;
 using SplitBook.Api.Features.Auth.Register;
@@ -506,5 +508,127 @@ public class RecordSettlementEndpointTests : IClassFixture<AppFactory>
         result1.Should().NotBeNull();
         result2.Should().NotBeNull();
         result1!.Id.Should().Be(result2!.Id, "idempotent requests must return the same settlement id");
+    }
+
+    [Fact]
+    public async Task RecordSettlement_NonExistentGroup_Returns404()
+    {
+        // Arrange — authenticated user, but group ID does not exist
+        var (client, _) = await CreateAuthClientAsync("nonexist_group_a@example.com", "NotExistGroupA123!");
+
+        var settlementRequest = new RecordSettlementRequest(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            3000,
+            "EUR",
+            DateOnly.Parse("2024-06-15")
+        );
+
+        // Act — POST to a group that was never created
+        var response = await client.PostAsJsonAsync($"/groups/{Guid.NewGuid()}/settlements", settlementRequest);
+
+        // Assert — 404 Not Found (not 403, to avoid leaking existence)
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task RecordSettlement_InvalidOccurredOn_Returns400()
+    {
+        // Arrange — register user A and user B, create group, add member
+        var (clientA, userIdA) = await CreateAuthClientAsync("invalid_date_a@example.com", "InvalidDateA123!");
+
+        var clientPlain = _factory.CreateClient();
+        var registerB = new RegisterRequest("invalid_date_b@example.com", "User B", "PassB123!");
+        var registerBResponse = await clientPlain.PostAsJsonAsync("/auth/register", registerB);
+        registerBResponse.EnsureSuccessStatusCode();
+        var registerBResult = await registerBResponse.ReadJsonAsync<RegisterResponse>();
+        var userIdB = registerBResult!.Id;
+
+        var createGroupRequest = new CreateGroupRequest("Invalid Date Group", "EUR");
+        var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("invalid_date_b@example.com");
+        var addMemberResponse = await clientA.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Act — POST settlement with occurredOn omitted entirely (deserializes to DateOnly.MinValue)
+        var missingOccurredOnJson = $@"{{
+            ""fromUserId"": ""{userIdB}"",
+            ""toUserId"": ""{userIdA}"",
+            ""amountMinor"": 3000,
+            ""currency"": ""EUR""
+        }}";
+        var content = new StringContent(missingOccurredOnJson, System.Text.Encoding.UTF8, "application/json");
+        var response = await clientA.PostAsync($"/groups/{groupId}/settlements", content);
+
+        // Assert — 400 Bad Request (OccurredOn is required; DateOnly.MinValue must be rejected)
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        // Assert — Problem+JSON shape
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
+        problem.Should().NotBeNull();
+        problem!.Status.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task RecordSettlement_IdempotencyKey_OnlyOneRowCreated()
+    {
+        // Arrange
+        var (client, userId) = await CreateAuthClientAsync("idemp_row_a@example.com", "IdempRowA123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("idemp_row_b@example.com", "IdempRowB123!");
+
+        var createGroupRequest = new CreateGroupRequest("Idempotency Row Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("idemp_row_b@example.com");
+        await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+
+        var settlementRequest = new RecordSettlementRequest(
+            userId,
+            userIdB,
+            3000,
+            "EUR",
+            DateOnly.Parse("2024-06-15")
+        );
+
+        var idempotencyKey = "row-count-key-17";
+        var content = System.Text.Json.JsonSerializer.Serialize(settlementRequest);
+
+        // Act — first POST with Idempotency-Key
+        var request1 = new HttpRequestMessage(HttpMethod.Post, $"/groups/{groupId}/settlements")
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+        };
+        request1.Headers.Add("Idempotency-Key", idempotencyKey);
+        var response1 = await client.SendAsync(request1);
+        response1.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Act — second POST with the same key (idempotent)
+        var request2 = new HttpRequestMessage(HttpMethod.Post, $"/groups/{groupId}/settlements")
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+        };
+        request2.Headers.Add("Idempotency-Key", idempotencyKey);
+        var response2 = await client.SendAsync(request2);
+        response2.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Act — third POST with a different key (should create a new row)
+        var request3 = new HttpRequestMessage(HttpMethod.Post, $"/groups/{groupId}/settlements")
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+        };
+        request3.Headers.Add("Idempotency-Key", "different-key-18");
+        var response3 = await client.SendAsync(request3);
+        response3.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Assert — count rows in the database for this group: should be exactly 2 (one for first key, one for different key)
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SplitBook.Api.Infrastructure.Persistence.AppDbContext>();
+        var rowCount = await db.Settlements.IgnoreQueryFilters().CountAsync(s => s.GroupId == groupId);
+        rowCount.Should().Be(2, "idempotent requests must create only one row; different key creates a second");
     }
 }
