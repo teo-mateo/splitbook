@@ -36,5 +36,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<ExpenseSplit>()
             .HasKey(es => new { es.ExpenseId, es.UserId });
+
+        modelBuilder.Entity<Settlement>()
+            .HasQueryFilter(s => s.DeletedAt == null);
     }
 }

@@ -94,4 +94,56 @@ public class BalanceCalculatorTests
         // Assert — invariant: balances must sum to zero
         balances.Sum(b => b.NetAmountMinor).Should().Be(0L);
     }
+
+    [Fact]
+    public void BalanceCalculator_Settlement_AdjustsBalancesCorrectly()
+    {
+        // Arrange
+        var userA = Guid.NewGuid();
+        var userB = Guid.NewGuid();
+        var expenseId = Guid.NewGuid();
+
+        // Expense: 6000, paid by A, equal split → A: +3000, B: -3000
+        var expense = new Expense
+        {
+            Id = expenseId,
+            PayerUserId = userA,
+            AmountMinor = 6000,
+            Currency = "EUR"
+        };
+
+        var splits = new List<ExpenseSplit>
+        {
+            new() { ExpenseId = expenseId, UserId = userA, AmountMinor = 3000 },
+            new() { ExpenseId = expenseId, UserId = userB, AmountMinor = 3000 }
+        };
+
+        // Settlement: B pays A 3000 → should zero both balances
+        var settlement = new Settlement
+        {
+            Id = Guid.NewGuid(),
+            GroupId = Guid.NewGuid(),
+            FromUserId = userB,
+            ToUserId = userA,
+            AmountMinor = 3000,
+            Currency = "EUR"
+        };
+
+        var memberIds = new List<Guid> { userA, userB };
+        var expenses = new List<Expense> { expense };
+        var settlements = new List<Settlement> { settlement };
+
+        // Act
+        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits, settlements);
+
+        // Assert — both balances should be zero after settlement
+        var userABalance = balances.Single(b => b.UserId == userA);
+        var userBBalance = balances.Single(b => b.UserId == userB);
+
+        // A: +3000 (from expense) - 3000 (from settlement, received) = 0
+        userABalance.NetAmountMinor.Should().Be(0, "user A received 3000 from B, clearing their positive balance");
+
+        // B: -3000 (from expense) + 3000 (from settlement, paid) = 0
+        userBBalance.NetAmountMinor.Should().Be(0, "user B paid 3000 to A, clearing their negative balance");
+    }
 }
