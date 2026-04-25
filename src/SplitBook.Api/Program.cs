@@ -14,6 +14,7 @@ using SplitBook.Api.Features.Expenses.ListExpenses;
 using SplitBook.Api.Features.Expenses.EditExpense;
 using SplitBook.Api.Features.Expenses.DeleteExpense;
 using SplitBook.Api.Features.Balances.GetGroupBalances;
+using SplitBook.Api.Features.Balances.GetSimplifiedDebts;
 using SplitBook.Api.Features.Settlements.RecordSettlement;
 using SplitBook.Api.Features.Settlements.ListSettlements;
 using SplitBook.Api.Infrastructure.Auth;
@@ -115,6 +116,7 @@ try
     groups.MapEditExpense();
     groups.MapDeleteExpense();
     groups.MapGetGroupBalances();
+    groups.MapGetSimplifiedDebts();
     groups.MapRecordSettlement();
     groups.MapListSettlements();
 
