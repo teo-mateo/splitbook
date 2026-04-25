@@ -69,17 +69,6 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** `test-writer` must actually run `dotnet test` and quote its output before returning, not just infer the red state from having written tests. `reviewer` must actually run `git diff` and `dotnet test` and quote their exit codes in its report. If a bash command comes back "invalid" or is unavailable, STOP and surface this — do not silently fall back to reading files and claim you've reviewed.
 - **Why:** In slice 0 the test-writer skipped `dotnet test` entirely and reviewer fell back to file-reading because bash was (incorrectly) disabled in the subagent configs. This broke the core L-01 safety signal. Verification must be explicit and visible in the transcript.
 
-### L-09: Batch validate collection membership in a single query
-- **Observed in:** slice 7
-- **Lesson:** When validating that multiple items belong to a collection (e.g., all expense participants are group members), issue ONE batch query using `Contains()` or a JOIN — never iterate and query per item.
-- **Why:** The primary wrote a loop that queried membership for each participant, producing an N+1 pattern. The fix was a single query checking all participant IDs at once. Every slice that validates "these users are all members of this group" will face the same trap.
-
-### L-10: Enforce cross-entity invariants in the handler
-- **Observed in:** slice 7
-- **Lesson:** When a handler creates a child entity that references a parent (expense → group, settlement → group), validate that the child's properties are consistent with the parent's properties before persisting. Load the parent once and compare.
-- **Why:** The primary accepted any currency for the expense without checking it matched the group's currency. The product spec says "every group has one currency" — the handler should have loaded the group and compared. This pattern applies to any parent-child relationship where the child inherits or must match parent properties.
-
-
 ### L-05: Use TypedResults.Problem() for ALL non-2xx error responses
 - **Observed in:** slice 1 (BadRequest), slice 4 (NotFound)
 - **Lesson:** When the spec demands RFC 7807 Problem+JSON for error responses, use `TypedResults.Problem()` for every non-2xx response — not just validation errors. Convenience helpers like `TypedResults.NotFound()`, `TypedResults.BadRequest<T>`, `TypedResults.Conflict()`, etc. produce bare JSON bodies, not the `type/title/status` Problem+JSON envelope. This applies to 404, 400, 409, 412, and any other error status code.
@@ -110,7 +99,12 @@ Read this file in full at the start of every slice. Paraphrase the entries you c
 - **Lesson:** When verifying a running API end-to-end, the agent must invoke bash **once per HTTP call**: curl A, read response, decide, curl B, read response, decide, etc. Never bundle a full smoke flow into one script. Reasons: (a) per-step output is the whole point of smoke testing — a bundled script hides which step actually broke; (b) the opencode permission gate is far more likely to auto-reject a 2KB compound script than a focused single-curl, so bundling raises the odds of a hard stop; (c) when one curl fails mid-flow, the agent has nothing to debug from a 1-line error message. Separately and just as important: when **any** tool returns `status=error`, the agent's very next assistant turn must explicitly acknowledge the failure (`"blocked because: <error text>"`) and propose a next step — not emit nothing and freeze. A silent agent is worse than a wrong agent.
 - **Why:** Two failure modes converged here. First, opencode's `bash: ask` permission policy treats compound scripts as scarier than single commands and rejects them more aggressively (sometimes auto-rejected in milliseconds with no human in the loop). Second, the agent's policy for unexpected tool failures was apparently "wait" — but `finish=tool-calls` with an error result is a terminal state on the model side; nothing is going to come unstick it without the model itself producing the next turn. Both are easy to fix at the agent-instructions level: smoke = one call per bash, and tool errors must always be surfaced + acted on within one turn.
 
-### L-13: SQLite EF Core cannot ORDER BY DateOnly or DateTimeOffset
+### L-14: SQLite EF Core cannot ORDER BY DateOnly or DateTimeOffset
 - **Observed in:** slice 9
 - **Lesson:** When querying with EF Core against SQLite, do not use `.OrderBy()` or `.OrderByDescending()` on `DateOnly` or `DateTimeOffset` columns — SQLite has no native type for these and EF Core cannot translate the expression. Either materialize first (`.ToListAsync()` then sort in-memory) or store a translatable surrogate (e.g., `DateTime` or `long Ticks`) for ordering. In-memory sort is acceptable when the spec doesn't require server-side pagination optimization.
 - **Why:** The primary wrote `.OrderByDescending(e => e.OccurredOn)` on a `DateOnly` column, which threw at runtime. This will recur on any slice that lists or filters by date (settlements list, expense date filters, reports). The primary had to materialize the entire table then sort/page in-memory — correct per spec, but worth knowing upfront to avoid the runtime crash.
+
+### L-15: Design test data to reject plausible wrong implementations
+- **Observed in:** slice 10
+- **Lesson:** When testing algorithmic logic (rounding, distribution, sorting, allocation), choose test data that would produce different results under a plausible wrong implementation. If the test passes with both the correct and a wrong-but-plausible approach, the test doesn't verify what it claims. Ask "what wrong answer would this data accept?" and adjust the inputs to reject it.
+- **Why:** The Percentage split rounding test (`AddExpense_PercentageSplit_Rounding_RemainderGoesToFirstParticipant`) used percentages 33.33/33.33/33.34 that naturally produced the expected amounts regardless of whether the remainder went to the first or last participant. The implementation gave remainder to the last (wrong per spec), the test passed, and the name/implementation mismatch went undetected until the reviewer caught the code-level divergence. This applies broadly to any test of distribution or rounding logic.

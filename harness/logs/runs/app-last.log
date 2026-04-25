@@ -1,0 +1,23 @@
+[13:16:45 INF] Executed DbCommand (6ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[13:16:45 INF] User profile is available. Using '/home/teodor/.aspnet/DataProtection-Keys' as key repository; keys will not be encrypted at rest.
+[13:16:45 INF] Now listening on: http://localhost:5124
+[13:16:45 INF] Application started. Press Ctrl+C to shut down.
+[13:16:45 INF] Hosting environment: Development
+[13:16:45 INF] Content root path: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api
+[13:16:46 INF] Request starting HTTP/1.1 GET http://localhost:5124/health - null null
+[13:16:46 INF] Executing endpoint 'HTTP: GET /health'
+[13:16:46 INF] Writing value of type '<>f__AnonymousType2`2' as Json.
+[13:16:46 INF] Executed endpoint 'HTTP: GET /health'
+[13:16:46 INF] Request finished HTTP/1.1 GET http://localhost:5124/health - 200 null application/json; charset=utf-8 77.1475ms
+[13:16:46 INF] Request starting HTTP/1.1 GET http://localhost:5124/health - null null
+[13:16:46 INF] Executing endpoint 'HTTP: GET /health'
+[13:16:46 INF] Writing value of type '<>f__AnonymousType2`2' as Json.
+[13:16:46 INF] Executed endpoint 'HTTP: GET /health'
+[13:16:46 INF] Request finished HTTP/1.1 GET http://localhost:5124/health - 200 null application/json; charset=utf-8 2.4478ms
+[13:16:46 INF] Request starting HTTP/1.1 GET http://localhost:5124/swagger - null null
+[13:16:46 INF] Request finished HTTP/1.1 GET http://localhost:5124/swagger - 301 0 null 3.43ms
+[13:16:46 INF] Request starting HTTP/1.1 GET http://localhost:5124/swagger/v1/swagger.json - null null
+[13:16:46 INF] No action descriptors found. This may indicate an incorrectly configured application or missing application parts. To learn more, visit https://aka.ms/aspnet/mvc/app-parts
+[13:16:46 INF] Request finished HTTP/1.1 GET http://localhost:5124/swagger/v1/swagger.json - 200 null application/json;charset=utf-8 94.6823ms
+[13:16:46 INF] Application is shutting down...

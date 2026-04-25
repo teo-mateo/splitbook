@@ -1,0 +1,537 @@
+Performing one time database migration, may take a few minutes...
+sqlite-migration:0
+sqlite-migration:25
+sqlite-migration:100
+sqlite-migration:100
+sqlite-migration:done
+Database migration complete.
+[0m
+> build · vllm-qwen3-6-27b-fp8
+[0m
+[0m→ [0mRead harness/logs
+[0m→ [0mRead specs/product-spec.md
+[0m→ [0mRead specs/technical-spec.md
+[0m→ [0mRead specs/slice-plan.md
+[0m→ [0mRead harness/README.md
+[0m→ [0mRead harness/LESSONS.md
+Let me read all the required files and check which slices have been completed.
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense
+[0m→ [0mRead src/SplitBook.Api/Domain/SplitMethod.cs
+[0m→ [0mRead src/SplitBook.Api/Domain/Expense.cs
+[0m→ [0mRead src/SplitBook.Api/Domain/ExpenseSplit.cs
+Now I can see that slices 0-9 have logs. The next slice is **Slice 10: Expenses — Percentage + Shares**.
+
+Let me examine the existing codebase to understand the current state before proceeding.
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseValidator.cs
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseEndpoint.cs
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseDtos.cs
+[0m✱ [0mGlob "tests/**/AddExpense*"[90m 1 match[0m
+Now I have a clear picture. Let me also check the existing tests for the AddExpense feature to understand the test patterns:
+[0m✱ [0mGlob "tests/**/Expense*"[90m 0 matches[0m
+[0m→ [0mRead tests/SplitBook.Api.Tests/Features/Expenses/AddExpense/AddExpenseEndpointTests.cs
+[0m• [0mAcceptance criteria for slice 10[90m Spec-Auditor Agent[0m
+Now I have a complete picture. Let me summarize:
+
+---
+
+## Slice 10: Expenses — Percentage + Shares
+
+**Next slice:** Slice 10 — extending the existing `POST /groups/{groupId}/expenses` endpoint to support `Percentage` and `Shares` split methods (both are proportional splits). Currently, the handler at `AddExpenseHandler.cs:72-73` explicitly rejects anything other than `Equal` or `Exact`.
+
+### Relevant lessons I'm keeping in mind:
+
+- **L-00 (read spec end-to-end):** Done — I've read all three specs in full above.
+- **L-H11 (mirror the nearest sibling):** I'm extending an existing handler, not creating a new feature folder. The new code paths for `Percentage` and `Shares` must follow the same patterns as `Equal` and `Exact` already do in `AddExpenseHandler.cs` — same error-emission strategy (`TypedResults.Problem()`), same membership validation, same split-building structure.
+- **L-11 (audit shared logic when extending):** Critical here — I'm adding two new split-method code paths to a handler that already has two. I must ensure the shared scaffolding (membership validation, currency check, idempotency) applies to the new paths. The payer membership check and participant membership check must work for Percentage and Shares just as they do for Equal and Exact.
+- **L-H8 (one test per @test-writer invocation):** I'll invoke test-writer once per acceptance criterion, not batch all tests.
+- **L-H10 (test-writer never touches Infrastructure/):** I'll enforce this constraint on test-writer.
+- **L-05 (TypedResults.Problem for all errors):** All error responses must use `TypedResults.Problem()`, not convenience helpers.
+- **L-07 (FluentValidation .Must() null-safety):** If I add any `.Must()` predicates on nullable fields, I must guard against null.
+- **L-10 (cross-entity invariants):** The expense currency must match the group currency — already enforced, but must carry through to new split methods.
+- **L-12 (verbose test output on 5xx):** If a test fails with 500, I'll rerun with `--logger "console;verbosity=detailed"` before guessing.
+- **L-13 (SQLite can't ORDER BY DateOnly):** Not directly relevant here (no ordering), but good to keep in mind.
+
+### Plan:
+
+1. **Ask `@spec-auditor`** to produce acceptance criteria for Percentage and Shares split methods from the product-spec (§4, §5) and technical-spec (§4 Expenses), focusing on: percentages must sum to 100, shares must be ≥ 1 each, AmountMinor is computed proportionally, and the split-sum invariant holds.
+2. **Expect red state:** The handler at line 72-73 explicitly rejects `Percentage` and `Shares` with `"Unsupported Split Method"` (400). Tests sending these split methods will get 400 instead of 201.
+3. **First production change after red:** Remove the `splitMethod != SplitMethod.Percentage && splitMethod != SplitMethod.Shares` guard at line 73, then implement `CalculatePercentageSplit()` and `CalculateSharesSplit()` methods following the same pattern as `CalculateEqualSplit()` and `CalculateExactSplit()`.
+
+Let me invoke `@spec-auditor` now.
+[0m✓ [0mAcceptance criteria for slice 10[90m Spec-Auditor Agent[0m
+[0m• [0mWrite test for percentage happy path[90m Test-Writer Agent[0m
+Good. I have 9 acceptance criteria. Criteria 7 and 8 are regression checks (existing tests must pass) — no new tests needed for those. Criterion 9 is covered by the happy-path assertions in criteria 1 and 4. So I'll work through criteria 1-6 as the inner loop.
+
+Let me start with **Criterion 1: Percentage happy path**.
+[0m✓ [0mWrite test for percentage happy path[90m Test-Writer Agent[0m
+[0m→ [0mRead tests/SplitBook.Api.Tests/Features/Expenses/AddExpense/AddExpenseEndpointTests.cs[90m [offset=730][0m
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Now I'll implement the minimum production code to make the Percentage happy path test pass.
+[0m
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -68,10 +68,9 @@
+     );
+ }
+ 
+ // Parse split method
+-if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod) ||
+-    (splitMethod != SplitMethod.Equal && splitMethod != SplitMethod.Exact))
++if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod))
+ {
+     return TypedResults.Problem(title: "Unsupported Split Method", statusCode: 400);
+ }
+ 
+
+[0m
+Now I'll implement the minimum code to make the Percentage happy path test pass. I need to:
+
+1. Accept `Percentage` in the split method check (line 72-73)
+2. Add Percentage validation (percentages must sum to 100)
+3. Add `CalculatePercentageSplit` method
+4. Wire it into the switch expression
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -97,8 +97,32 @@
+             statusCode: 400);
+     }
+ }
+ 
++// For Percentage split, validate that percentages sum to 100 and each is non-negative
++if (splitMethod == SplitMethod.Percentage)
++{
++    foreach (var split in request.Splits)
++    {
++        if (!split.Percentage.HasValue || split.Percentage < 0)
++        {
++            return TypedResults.Problem(
++                title: "Validation Failed",
++                detail: "Each participant must have a non-negative percentage for Percentage split",
++                statusCode: 400);
++        }
++    }
++
++    var percentageSum = request.Splits.Sum(s => s.Percentage!.Value);
++    if (Math.Abs(percentageSum - 100.0) > 0.01)
++    {
++        return TypedResults.Problem(
++            title: "Validation Failed",
++            detail: $"Sum of percentages ({percentageSum}) must equal 100",
++            statusCode: 400);
++    }
++}
++
+ // Collect all user IDs that need membership checks (always include payer)
+ var participantUserIds = request.Splits.Select(s => s.UserId).ToHashSet();
+ participantUserIds.Add(request.PayerUserId);
+ 
+
+[0m
+Now add Percentage validation and the calculate method, plus wire it into the switch:
+Now let me add the `CalculatePercentageSplit` method and wire it into the switch:
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -168,8 +168,9 @@
+ var splits = splitMethod switch
+ {
+     SplitMethod.Equal => CalculateEqualSplit(request, expense.Id),
+     SplitMethod.Exact => CalculateExactSplit(request, expense.Id),
++    SplitMethod.Percentage => CalculatePercentageSplit(request, expense.Id),
+     _ => throw new InvalidOperationException($"Unhandled split method: {splitMethod}")
+ };
+ context.ExpenseSplits.AddRange(splits);
+ await context.SaveChangesAsync();
+
+[0m
+Now add the `CalculatePercentageSplit` method after `CalculateExactSplit`:
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -215,8 +215,41 @@
+ 
+     return splits;
+ }
+ 
++private static List<ExpenseSplit> CalculatePercentageSplit(AddExpenseRequest request, Guid expenseId)
++{
++    var splits = new List<ExpenseSplit>(request.Splits.Count);
++    long assignedTotal = 0;
++
++    for (int i = 0; i < request.Splits.Count; i++)
++    {
++        var split = request.Splits[i];
++        long amount;
++
++        if (i == request.Splits.Count - 1)
++        {
++            // Last participant gets the remainder to ensure sum equals total
++            amount = request.AmountMinor - assignedTotal;
++        }
++        else
++        {
++            amount = (long)Math.Round(split.Percentage!.Value / 100.0 * request.AmountMinor);
++            assignedTotal += amount;
++        }
++
++        splits.Add(new ExpenseSplit
++        {
++            ExpenseId = expenseId,
++            UserId = split.UserId,
++            AmountMinor = amount,
++            Percentage = split.Percentage,
++        });
++    }
++
++    return splits;
++}
++
+ private static Created<ExpenseDto> MapToCreated(Expense expense, AppDbContext context)
+ {
+     var splits = context.ExpenseSplits
+         .Where(es => es.ExpenseId == expense.Id)
+
+[0m
+Now let me run the test to see if it passes:
+[0m$ [0mdotnet test --filter "FullyQualifiedName~PercentageSplit_HappyPath" --logger "console;verbosity=detailed" --nologo 2>&1 | tail -50
+INSERT INTO "Memberships" ("GroupId", "UserId", "JoinedAt", "RemovedAt")
+VALUES (@p0, @p1, @p2, @p3);
+[04:17:20 INF] Setting HTTP status code 204.
+[04:17:20 INF] Executed endpoint 'HTTP: POST /groups/{id}/members => HandleAsync'
+[04:17:20 INF] Request finished HTTP/1.1 POST http://localhost/groups/de1e4302-033c-4aab-a239-e39fd66c47c8/members - 204 null null 37.6255ms
+[04:17:20 INF] Request starting HTTP/1.1 POST http://localhost/groups/de1e4302-033c-4aab-a239-e39fd66c47c8/expenses - application/json; charset=utf-8 393
+[04:17:20 INF] Executing endpoint 'HTTP: POST /groups/{id}/expenses => HandleAsync'
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@__id_0='?' (DbType = Guid), @__currentUser_Id_1='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT "m"."GroupId", "m"."UserId", "m"."JoinedAt", "m"."RemovedAt"
+FROM "Memberships" AS "m"
+WHERE "m"."GroupId" = @__id_0 AND "m"."UserId" = @__currentUser_Id_1 AND "m"."RemovedAt" IS NULL
+LIMIT 1
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@__id_0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT "g"."Id", "g"."ArchivedAt", "g"."CreatedAt", "g"."CreatedByUserId", "g"."Currency", "g"."Name", "g"."Version"
+FROM "Groups" AS "g"
+WHERE "g"."Id" = @__id_0
+LIMIT 1
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@__id_0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT "m"."GroupId", "m"."UserId", "m"."JoinedAt", "m"."RemovedAt"
+FROM "Memberships" AS "m"
+WHERE "m"."GroupId" = @__id_0 AND "m"."UserId" IN ('8871BBCF-EE8D-4660-B1B7-C06B4AC4F250', '3B4DE041-2B56-49DF-B36B-CFC9F67FE1A7') AND "m"."RemovedAt" IS NULL
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Int64), @p2='?' (DbType = DateTimeOffset), @p3='?' (Size = 3), @p4='?' (DbType = DateTimeOffset), @p5='?' (Size = 23), @p6='?' (DbType = Guid), @p7='?', @p8='?' (DbType = Date), @p9='?' (DbType = Guid), @p10='?' (DbType = Int32), @p11='?' (DbType = Int64)], CommandType='Text', CommandTimeout='30']
+INSERT INTO "Expenses" ("Id", "AmountMinor", "CreatedAt", "Currency", "DeletedAt", "Description", "GroupId", "IdempotencyKey", "OccurredOn", "PayerUserId", "SplitMethod", "Version")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11);
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Int64), @p3='?' (DbType = Double), @p4='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+INSERT INTO "ExpenseSplits" ("ExpenseId", "UserId", "AmountMinor", "Percentage", "Shares")
+VALUES (@p0, @p1, @p2, @p3, @p4);
+[04:17:20 INF] Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Int64), @p3='?' (DbType = Double), @p4='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+INSERT INTO "ExpenseSplits" ("ExpenseId", "UserId", "AmountMinor", "Percentage", "Shares")
+VALUES (@p0, @p1, @p2, @p3, @p4);
+[04:17:21 INF] Executed DbCommand (0ms) [Parameters=[@__expense_Id_0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT "e"."UserId", "e"."AmountMinor"
+FROM "ExpenseSplits" AS "e"
+WHERE "e"."ExpenseId" = @__expense_Id_0
+ORDER BY "e"."UserId"
+[04:17:21 INF] Setting HTTP status code 201.
+[04:17:21 INF] Writing value of type 'ExpenseDto' as Json.
+[04:17:21 INF] Executed endpoint 'HTTP: POST /groups/{id}/expenses => HandleAsync'
+[04:17:21 INF] Request finished HTTP/1.1 POST http://localhost/groups/de1e4302-033c-4aab-a239-e39fd66c47c8/expenses - 201 null application/json; charset=utf-8 153.1149ms
+[04:17:21 INF] Executed DbCommand (0ms) [Parameters=[@__expenseId_0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT "e"."ExpenseId", "e"."UserId", "e"."AmountMinor", "e"."Percentage", "e"."Shares"
+FROM "ExpenseSplits" AS "e"
+WHERE "e"."ExpenseId" = @__expenseId_0
+[xUnit.net 00:00:02.34]   Finished:    SplitBook.Api.Tests
+  Passed SplitBook.Api.Tests.Features.Expenses.AddExpense.AddExpenseEndpointTests.AddExpense_PercentageSplit_HappyPath_Returns201_WithCorrectAmounts [1 s]
+
+Test Run Successful.
+Total tests: 1
+     Passed: 1
+ Total time: 2.7928 Seconds
+[0m
+Test passes. Now run the full suite to confirm no regressions:
+[0m$ [0mdotnet test --nologo 2>&1 | tail -10
+Determining projects to restore...
+  All projects are up-to-date for restore.
+  SplitBook.Api -> /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/bin/Debug/net8.0/SplitBook.Api.dll
+  SplitBook.Api.Tests -> /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll
+Test run for /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    82, Skipped:     0, Total:    82, Duration: 7 s - SplitBook.Api.Tests.dll (net8.0)
+[0m
+[0m• [0mTest percentage sum validation[90m Test-Writer Agent[0m
+All 82 tests pass (81 existing + 1 new). Criterion 1 is green.
+
+Now moving to **Criterion 2: Percentage must sum to 100 (or 400)**.
+[0m✓ [0mTest percentage sum validation[90m Test-Writer Agent[0m
+[0m• [0mTest percentage rounding remainder[90m Test-Writer Agent[0m
+Criterion 2 is green (the validation was already implemented when I added the percentage support). Now moving to **Criterion 3: Percentage rounding — deterministic remainder**.
+[0m✓ [0mTest percentage rounding remainder[90m Test-Writer Agent[0m
+[0m• [0mTest shares happy path[90m Test-Writer Agent[0m
+Good — criterion 3 passes. The test verifies the invariant (sum equals total). The remainder logic in my implementation assigns the remainder to the last participant, which ensures the sum invariant holds exactly.
+
+Now moving to **Criterion 4: Shares happy path**.
+[0m✓ [0mTest shares happy path[90m Test-Writer Agent[0m
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Now I'll implement Shares support. Let me read the current handler state:
+[0m
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -121,8 +121,23 @@
+             statusCode: 400);
+     }
+ }
+ 
++// For Shares split, validate that each participant has shares >= 1
++if (splitMethod == SplitMethod.Shares)
++{
++    foreach (var split in request.Splits)
++    {
++        if (!split.Shares.HasValue || split.Shares < 1)
++        {
++            return TypedResults.Problem(
++                title: "Validation Failed",
++                detail: "Each participant must have at least 1 share for Shares split",
++                statusCode: 400);
++        }
++    }
++}
++
+ // Collect all user IDs that need membership checks (always include payer)
+ var participantUserIds = request.Splits.Select(s => s.UserId).ToHashSet();
+ participantUserIds.Add(request.PayerUserId);
+ 
+
+[0m
+Now I'll add Shares support — validation and calculation.
+Now wire Shares into the switch and add the calculation method:
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -184,8 +184,9 @@
+ {
+     SplitMethod.Equal => CalculateEqualSplit(request, expense.Id),
+     SplitMethod.Exact => CalculateExactSplit(request, expense.Id),
+     SplitMethod.Percentage => CalculatePercentageSplit(request, expense.Id),
++    SplitMethod.Shares => CalculateSharesSplit(request, expense.Id),
+     _ => throw new InvalidOperationException($"Unhandled split method: {splitMethod}")
+ };
+ context.ExpenseSplits.AddRange(splits);
+ await context.SaveChangesAsync();
+
+[0m
+Now add the `CalculateSharesSplit` method after `CalculatePercentageSplit`:
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -264,8 +264,42 @@
+ 
+     return splits;
+ }
+ 
++private static List<ExpenseSplit> CalculateSharesSplit(AddExpenseRequest request, Guid expenseId)
++{
++    var totalShares = request.Splits.Sum(s => s.Shares!.Value);
++    var splits = new List<ExpenseSplit>(request.Splits.Count);
++    long assignedTotal = 0;
++
++    for (int i = 0; i < request.Splits.Count; i++)
++    {
++        var split = request.Splits[i];
++        long amount;
++
++        if (i == request.Splits.Count - 1)
++        {
++            // Last participant gets the remainder to ensure sum equals total
++            amount = request.AmountMinor - assignedTotal;
++        }
++        else
++        {
++            amount = (split.Shares!.Value * request.AmountMinor) / totalShares;
++            assignedTotal += amount;
++        }
++
++        splits.Add(new ExpenseSplit
++        {
++            ExpenseId = expenseId,
++            UserId = split.UserId,
++            AmountMinor = amount,
++            Shares = split.Shares,
++        });
++    }
++
++    return splits;
++}
++
+ private static Created<ExpenseDto> MapToCreated(Expense expense, AppDbContext context)
+ {
+     var splits = context.ExpenseSplits
+         .Where(es => es.ExpenseId == expense.Id)
+
+[0m
+[0m$ [0mdotnet test --filter "FullyQualifiedName~SharesSplit_HappyPath" --nologo 2>&1 | tail -20
+Determining projects to restore...
+  All projects are up-to-date for restore.
+  SplitBook.Api -> /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/bin/Debug/net8.0/SplitBook.Api.dll
+  SplitBook.Api.Tests -> /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll
+Test run for /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 1 s - SplitBook.Api.Tests.dll (net8.0)
+[0m
+[0m$ [0mdotnet test --nologo 2>&1 | tail -5
+SplitBook.Api.Tests -> /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll
+Test run for /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    85, Skipped:     0, Total:    85, Duration: 9 s - SplitBook.Api.Tests.dll (net8.0)
+[0m
+[0m• [0mTest shares >= 1 validation[90m Test-Writer Agent[0m
+85 tests pass. Criterion 4 (Shares happy path) is green.
+
+Now **Criterion 5: Shares must be ≥ 1 (or 400)**.
+[0m✓ [0mTest shares >= 1 validation[90m Test-Writer Agent[0m
+[0m• [0mTest shares rounding remainder[90m Test-Writer Agent[0m
+Criterion 5 is green (validation already exists). Now **Criterion 6: Shares rounding — deterministic remainder**.
+[0m✓ [0mTest shares rounding remainder[90m Test-Writer Agent[0m
+The test fails because my `CalculateSharesSplit` assigns the remainder to the *last* participant, but the spec says the *first* N participants get the extra cent. Let me fix this:
+[0m→ [0mRead src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs[90m [offset=260][0m
+[0m
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -273,21 +273,16 @@
+ 
+ for (int i = 0; i < request.Splits.Count; i++)
+ {
+     var split = request.Splits[i];
+-    long amount;
+ 
+-    if (i == request.Splits.Count - 1)
+-    {
+-        // Last participant gets the remainder to ensure sum equals total
+-        amount = request.AmountMinor - assignedTotal;
+-    }
+-    else
+-    {
+-        amount = (split.Shares!.Value * request.AmountMinor) / totalShares;
+-        assignedTotal += amount;
+-    }
++    // Last participant gets the remainder to ensure sum equals total exactly
++    long amount = i == request.Splits.Count - 1
++        ? request.AmountMinor - assignedTotal
++        : (split.Shares!.Value * request.AmountMinor) / totalShares;
+ 
++    assignedTotal += amount;
++
+     splits.Add(new ExpenseSplit
+     {
+         ExpenseId = expenseId,
+         UserId = split.UserId,
+
+[0m
+The issue is that with equal shares (3, 3, 3), each gets `3 * 10000 / 9 = 3333`, so the integer division truncates, leaving 1 cent unassigned. The remainder goes to the last participant in my current code, but the spec says "first N participants get one extra cent; N = remainder."
+
+Let me fix `CalculateSharesSplit` to match the Equal split pattern — first N participants get the extra cent:
+[0m← [0mEdit src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+Index: /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+===================================================================
+--- /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
++++ /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/Features/Expenses/AddExpense/AddExpenseHandler.cs
+@@ -267,22 +267,21 @@
+ 
+ private static List<ExpenseSplit> CalculateSharesSplit(AddExpenseRequest request, Guid expenseId)
+ {
+     var totalShares = request.Splits.Sum(s => s.Shares!.Value);
+-    var splits = new List<ExpenseSplit>(request.Splits.Count);
+-    long assignedTotal = 0;
+ 
++    // Calculate base amounts using integer division
++    var baseAmounts = request.Splits.Select(s => (s.Shares!.Value * request.AmountMinor) / totalShares).ToList();
++    long assignedTotal = baseAmounts.Sum();
++    var remainder = request.AmountMinor - assignedTotal;
++
++    // Distribute remainder to first N participants (N = remainder)
++    var splits = new List<ExpenseSplit>(request.Splits.Count);
+     for (int i = 0; i < request.Splits.Count; i++)
+     {
+         var split = request.Splits[i];
++        var amount = baseAmounts[i] + (i < remainder ? 1 : 0);
+ 
+-        // Last participant gets the remainder to ensure sum equals total exactly
+-        long amount = i == request.Splits.Count - 1
+-            ? request.AmountMinor - assignedTotal
+-            : (split.Shares!.Value * request.AmountMinor) / totalShares;
+-
+-        assignedTotal += amount;
+-
+         splits.Add(new ExpenseSplit
+         {
+             ExpenseId = expenseId,
+             UserId = split.UserId,
+
+[0m
+Wait — the test expects the *first* participant to get 3334, but my code gives the remainder to the *last*. The spec says "first N participants get one extra cent; N = remainder." Let me look at how `CalculateEqualSplit` handles this — it uses `i < remainder` to give extra cents to the first participants. I should follow the same pattern for Shares.
+
+But wait — the Shares calculation is different from Equal. In Equal, each participant gets `total / count` with `total % count` remainder distributed to the first N. In Shares, each participant gets `(shares * total) / totalShares` — the truncation happens per-participant, not globally. The "last participant gets remainder" approach is actually the correct general approach because it guarantees the sum invariant regardless of how the truncation distributes.
+
+But the test expects the *first* participant to get 3334. Let me re-read the test assertion... The test says "first participant in request order receives the 1-cent remainder." So I need to distribute the remainder to the first participants, not the last.
+
+Let me fix this to match the Equal split pattern:
+[0m$ [0mdotnet test --filter "FullyQualifiedName~SharesSplit_Rounding" --nologo 2>&1 | tail -10
+Determining projects to restore...
+  All projects are up-to-date for restore.
+  SplitBook.Api -> /home/teodor/little-projects/trash/30-app-benchmark/src/SplitBook.Api/bin/Debug/net8.0/SplitBook.Api.dll
+  SplitBook.Api.Tests -> /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll
+Test run for /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 1 s - SplitBook.Api.Tests.dll (net8.0)
+[0m
+[0m$ [0mdotnet test --nologo 2>&1 | tail -5
+SplitBook.Api.Tests -> /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll
+Test run for /home/teodor/little-projects/trash/30-app-benchmark/tests/SplitBook.Api.Tests/bin/Debug/net8.0/SplitBook.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    87, Skipped:     0, Total:    87, Duration: 11 s - SplitBook.Api.Tests.dll (net8.0)
+[0m
+All 6 criteria are green. 87 tests pass with zero regressions. Now I need to run the smoke test, then invoke `@reviewer`.
+[0m→ [0mSkill "app-lifecycle"
+[0m
+[0m$ [0mscripts/app.sh smoke 2>&1
+-- starting API on http://localhost:5124 (env=Development)
+-- API up (pid 2767648, log /home/teodor/little-projects/trash/30-app-benchmark/harness/logs/runs/app-last.log)
+-- smoke probes:
+   /health                              200
+   /swagger                             301
+   /swagger/v1/swagger.json             200
+-- smoke PASS
+-- stopping pid 2767648
+-- stopped
+[0m
+Smoke test passes. Now let me also do a quick smoke curl of the actual Percentage endpoint to verify it works against the running API:
+[0m$ [0mscripts/app.sh start 2>&1
+-- starting API on http://localhost:5124 (env=Development)
+-- API up (pid 2768030, log /home/teodor/little-projects/trash/30-app-benchmark/harness/logs/runs/app-last.log)
+[0m
+[93m[1m! [0mpermission requested: external_directory (/tmp/*); auto-rejecting
+[0m✗ [0mbash failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.
+Quick golden-path smoke test for Percentage and Shares:

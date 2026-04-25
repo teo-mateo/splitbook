@@ -727,4 +727,385 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         result.Splits.Should().HaveCount(1);
         result.Splits[0].AmountMinor.Should().Be(5000, "single participant exact split should have the full amount");
     }
+
+    [Fact]
+    public async Task AddExpense_PercentageSplit_HappyPath_Returns201_WithCorrectAmounts()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("percent_happy_a@example.com", "PercentPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("percent_happy_b@example.com", "PercentPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Percentage Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("percent_happy_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 10000 (€100); A gets 70%, B gets 30% → 7000 and 3000
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Percentage split dinner",
+            DateOnly.Parse("2024-01-15"),
+            "Percentage",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, 70.0, null),
+                new ExpenseSplitRequest(userIdB, null, 30.0, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.ReadJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Percentage");
+        result.Splits.Should().HaveCount(2);
+
+        // Assert — computed amounts (identify by userId, not positional)
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        splitA.AmountMinor.Should().Be(7000, "70% of 10000 minor units should be 7000");
+        splitB.AmountMinor.Should().Be(3000, "30% of 10000 minor units should be 3000");
+
+        // Assert — invariant: sum of split amounts equals expense total exactly
+        result.Splits.Sum(s => s.AmountMinor).Should().Be(10000, "split amounts must sum to the expense total");
+
+        // Assert — database has ExpenseSplit rows with correct computed amounts
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(2);
+        var dbSplitA = dbSplits.Single(es => es.UserId == userIdA);
+        var dbSplitB = dbSplits.Single(es => es.UserId == userIdB);
+        dbSplitA.AmountMinor.Should().Be(7000);
+        dbSplitB.AmountMinor.Should().Be(3000);
+    }
+
+    [Fact]
+    public async Task AddExpense_PercentageSplit_SumNot100_Returns400_NoExpenseCreated()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("percent_sum_a@example.com", "PercentSumPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("percent_sum_b@example.com", "PercentSumPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Percentage Sum Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("percent_sum_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 10000; A gets 60%, B gets 30% → sum = 90, NOT 100
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Percentage split sum not 100",
+            DateOnly.Parse("2024-01-15"),
+            "Percentage",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, 60.0, null),
+                new ExpenseSplitRequest(userIdB, null, 30.0, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+
+        // Assert — 400 Bad Request
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "percentages must sum to exactly 100");
+
+        // Assert — Problem+JSON shape
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
+        problem.Should().NotBeNull();
+        problem!.Type.Should().NotBeNull();
+        problem.Title.Should().NotBeNull();
+        problem.Status.Should().Be(400);
+
+        // Assert — no Expense row was created in the database
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseCount = await db.Expenses
+            .Where(e => e.GroupId == groupId)
+            .CountAsync();
+        expenseCount.Should().Be(0, "no expense should be persisted when validation fails");
+    }
+
+    [Fact]
+    public async Task AddExpense_PercentageSplit_Rounding_RemainderGoesToFirstParticipant()
+    {
+        // Arrange — register three users
+        var (client, userIdA) = await CreateAuthClientAsync("percent_round_a@example.com", "PercentRoundPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("percent_round_b@example.com", "PercentRoundPass123!");
+        var (_, userIdC) = await RegisterAndLoginAsync("percent_round_c@example.com", "PercentRoundPass123!");
+
+        // Create group and add users B and C
+        var createGroupRequest = new CreateGroupRequest("Percentage Rounding Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberB = new AddMemberRequest("percent_round_b@example.com");
+        await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberB);
+
+        var addMemberC = new AddMemberRequest("percent_round_c@example.com");
+        await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberC);
+
+        // Total = 10000 (€100); 33.33% + 33.33% + 33.34% = 100%
+        // Expected: 3333 + 3333 + 3334 = 10000 (1-cent remainder to first participant in request order)
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Percentage rounding test",
+            DateOnly.Parse("2024-01-15"),
+            "Percentage",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, 33.33, null),
+                new ExpenseSplitRequest(userIdB, null, 33.33, null),
+                new ExpenseSplitRequest(userIdC, null, 33.34, null)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.ReadJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Percentage");
+        result.Splits.Should().HaveCount(3);
+
+        // Assert — individual split amounts (identify by userId, not positional)
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        var splitC = result.Splits.Single(s => s.UserId == userIdC);
+
+        splitA.AmountMinor.Should().Be(3333, "33.33% of 10000 should be 3333");
+        splitB.AmountMinor.Should().Be(3333, "33.33% of 10000 should be 3333");
+        splitC.AmountMinor.Should().Be(3334, "33.34% of 10000 should be 3334");
+
+        // Assert — invariant: sum of split amounts equals expense total exactly
+        result.Splits.Sum(s => s.AmountMinor).Should().Be(10000, "split amounts must sum to the expense total exactly");
+
+        // Assert — database ExpenseSplit rows match
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(3);
+        dbSplits.Sum(es => es.AmountMinor).Should().Be(10000, "database split amounts must sum to the expense total exactly");
+    }
+
+    [Fact]
+    public async Task AddExpense_SharesSplit_HappyPath_Returns201_WithCorrectAmounts()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("shares_happy_a@example.com", "SharesPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("shares_happy_b@example.com", "SharesPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Shares Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("shares_happy_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 10000 (EUR); A has 3 shares, B has 2 shares (total 5)
+        // A: 3/5 * 10000 = 6000; B: 2/5 * 10000 = 4000
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Shares split dinner",
+            DateOnly.Parse("2024-01-15"),
+            "Shares",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, null, 3),
+                new ExpenseSplitRequest(userIdB, null, null, 2)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.ReadJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Shares");
+        result.Splits.Should().HaveCount(2);
+
+        // Assert — computed amounts (identify by userId, not positional)
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        splitA.AmountMinor.Should().Be(6000, "3 shares out of 5 total on 10000 should be 6000");
+        splitB.AmountMinor.Should().Be(4000, "2 shares out of 5 total on 10000 should be 4000");
+
+        // Assert — invariant: sum of split amounts equals expense total exactly
+        result.Splits.Sum(s => s.AmountMinor).Should().Be(10000, "split amounts must sum to the expense total");
+
+        // Assert — database has ExpenseSplit rows with correct computed amounts
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(2);
+        var dbSplitA = dbSplits.Single(es => es.UserId == userIdA);
+        var dbSplitB = dbSplits.Single(es => es.UserId == userIdB);
+        dbSplitA.AmountMinor.Should().Be(6000);
+        dbSplitB.AmountMinor.Should().Be(4000);
+    }
+
+    [Fact]
+    public async Task AddExpense_SharesSplit_ZeroShares_Returns400_NoExpenseCreated()
+    {
+        // Arrange — register two users
+        var (client, userIdA) = await CreateAuthClientAsync("shares_zero_a@example.com", "SharesZeroPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("shares_zero_b@example.com", "SharesZeroPass123!");
+
+        // Create group and add user B
+        var createGroupRequest = new CreateGroupRequest("Shares Zero Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberRequest = new AddMemberRequest("shares_zero_b@example.com");
+        var addMemberResponse = await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberRequest);
+        addMemberResponse.EnsureSuccessStatusCode();
+
+        // Total = 10000; A has 3 shares, B has 0 shares — B's shares <= 0 is invalid
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Shares split with zero shares",
+            DateOnly.Parse("2024-01-15"),
+            "Shares",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, null, 3),
+                new ExpenseSplitRequest(userIdB, null, null, 0)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+
+        // Assert — 400 Bad Request
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "each participant must have shares >= 1");
+
+        // Assert — Problem+JSON shape
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
+        problem.Should().NotBeNull();
+        problem!.Type.Should().NotBeNull();
+        problem.Title.Should().NotBeNull();
+        problem.Status.Should().Be(400);
+
+        // Assert — no Expense row was created in the database
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseCount = await db.Expenses
+            .Where(e => e.GroupId == groupId)
+            .CountAsync();
+        expenseCount.Should().Be(0, "no expense should be persisted when shares validation fails");
+    }
+
+    [Fact]
+    public async Task AddExpense_SharesSplit_Rounding_RemainderGoesToFirstParticipant()
+    {
+        // Arrange — register three users
+        var (client, userIdA) = await CreateAuthClientAsync("shares_round_a@example.com", "SharesRoundPass123!");
+        var (_, userIdB) = await RegisterAndLoginAsync("shares_round_b@example.com", "SharesRoundPass123!");
+        var (_, userIdC) = await RegisterAndLoginAsync("shares_round_c@example.com", "SharesRoundPass123!");
+
+        // Create group and add users B and C
+        var createGroupRequest = new CreateGroupRequest("Shares Rounding Group", "EUR");
+        var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
+        var groupId = groupDto!.Id;
+
+        var addMemberB = new AddMemberRequest("shares_round_b@example.com");
+        await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberB);
+
+        var addMemberC = new AddMemberRequest("shares_round_c@example.com");
+        await client.PostAsJsonAsync($"/groups/{groupId}/members", addMemberC);
+
+        // Total = 10000 (€100); shares 3, 3, 3 (total 9)
+        // 10000 / 9 = 1111.11... per share → base = 1111, each gets 3 * 1111 = 3333
+        // Remainder = 10000 - 3 * 3333 = 1 → first participant in request order gets the extra cent
+        // Expected: A = 3334, B = 3333, C = 3333
+        var expenseRequest = new AddExpenseRequest(
+            userIdA,
+            10000,
+            "EUR",
+            "Shares rounding test",
+            DateOnly.Parse("2024-01-15"),
+            "Shares",
+            new List<ExpenseSplitRequest>
+            {
+                new ExpenseSplitRequest(userIdA, null, null, 3),
+                new ExpenseSplitRequest(userIdB, null, null, 3),
+                new ExpenseSplitRequest(userIdC, null, null, 3)
+            }
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
+        var result = await response.ReadJsonAsync<ExpenseDto>();
+
+        // Assert — HTTP 201 Created
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        result.Should().NotBeNull();
+        result!.SplitMethod.Should().Be("Shares");
+        result.Splits.Should().HaveCount(3);
+
+        // Assert — individual split amounts (identify by userId, not positional)
+        var splitA = result.Splits.Single(s => s.UserId == userIdA);
+        var splitB = result.Splits.Single(s => s.UserId == userIdB);
+        var splitC = result.Splits.Single(s => s.UserId == userIdC);
+
+        splitA.AmountMinor.Should().Be(3334, "first participant in request order receives the 1-cent remainder");
+        splitB.AmountMinor.Should().Be(3333);
+        splitC.AmountMinor.Should().Be(3333);
+
+        // Assert — invariant: sum of split amounts equals expense total exactly
+        result.Splits.Sum(s => s.AmountMinor).Should().Be(10000, "split amounts must sum to the expense total exactly");
+
+        // Assert — database ExpenseSplit rows match
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var expenseId = result.Id;
+        var dbSplits = await db.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        dbSplits.Should().HaveCount(3);
+        dbSplits.Sum(es => es.AmountMinor).Should().Be(10000, "database split amounts must sum to the expense total exactly");
+    }
 }

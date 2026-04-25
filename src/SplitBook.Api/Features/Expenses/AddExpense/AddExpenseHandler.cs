@@ -69,8 +69,7 @@ public static class AddExpenseHandler
         }
 
         // Parse split method
-        if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod) ||
-            (splitMethod != SplitMethod.Equal && splitMethod != SplitMethod.Exact))
+        if (!Enum.TryParse<SplitMethod>(request.SplitMethod, true, out var splitMethod))
         {
             return TypedResults.Problem(title: "Unsupported Split Method", statusCode: 400);
         }
@@ -96,6 +95,45 @@ public static class AddExpenseHandler
                     title: "Validation Failed",
                     detail: $"Sum of participant amounts ({splitSum}) must equal the expense total ({request.AmountMinor})",
                     statusCode: 400);
+            }
+        }
+
+        // For Percentage split, validate that percentages sum to 100 and each is non-negative
+        if (splitMethod == SplitMethod.Percentage)
+        {
+            foreach (var split in request.Splits)
+            {
+                if (!split.Percentage.HasValue || split.Percentage < 0)
+                {
+                    return TypedResults.Problem(
+                        title: "Validation Failed",
+                        detail: "Each participant must have a non-negative percentage for Percentage split",
+                        statusCode: 400);
+                }
+            }
+
+            var percentageSum = request.Splits.Sum(s => s.Percentage!.Value);
+            if (Math.Abs(percentageSum - 100.0) > 0.01)
+            {
+                return TypedResults.Problem(
+                    title: "Validation Failed",
+                    detail: $"Sum of percentages ({percentageSum}) must equal 100",
+                    statusCode: 400);
+            }
+        }
+
+        // For Shares split, validate that each participant has shares >= 1
+        if (splitMethod == SplitMethod.Shares)
+        {
+            foreach (var split in request.Splits)
+            {
+                if (!split.Shares.HasValue || split.Shares < 1)
+                {
+                    return TypedResults.Problem(
+                        title: "Validation Failed",
+                        detail: "Each participant must have at least 1 share for Shares split",
+                        statusCode: 400);
+                }
             }
         }
 
@@ -146,6 +184,8 @@ public static class AddExpenseHandler
         {
             SplitMethod.Equal => CalculateEqualSplit(request, expense.Id),
             SplitMethod.Exact => CalculateExactSplit(request, expense.Id),
+            SplitMethod.Percentage => CalculatePercentageSplit(request, expense.Id),
+            SplitMethod.Shares => CalculateSharesSplit(request, expense.Id),
             _ => throw new InvalidOperationException($"Unhandled split method: {splitMethod}")
         };
         context.ExpenseSplits.AddRange(splits);
@@ -186,6 +226,62 @@ public static class AddExpenseHandler
                 ExpenseId = expenseId,
                 UserId = split.UserId,
                 AmountMinor = split.AmountMinor!.Value,
+            });
+        }
+
+        return splits;
+    }
+
+    private static List<ExpenseSplit> CalculatePercentageSplit(AddExpenseRequest request, Guid expenseId)
+    {
+        // Calculate base amounts using rounded percentage of total
+        var baseAmounts = request.Splits
+            .Select(s => (long)Math.Round(s.Percentage!.Value / 100.0 * request.AmountMinor))
+            .ToList();
+        long assignedTotal = baseAmounts.Sum();
+        var remainder = request.AmountMinor - assignedTotal;
+
+        // Distribute remainder to first N participants (N = remainder)
+        var splits = new List<ExpenseSplit>(request.Splits.Count);
+        for (int i = 0; i < request.Splits.Count; i++)
+        {
+            var split = request.Splits[i];
+            var amount = baseAmounts[i] + (i < Math.Abs(remainder) ? (remainder > 0 ? 1 : -1) : 0);
+
+            splits.Add(new ExpenseSplit
+            {
+                ExpenseId = expenseId,
+                UserId = split.UserId,
+                AmountMinor = amount,
+                Percentage = split.Percentage,
+            });
+        }
+
+        return splits;
+    }
+
+    private static List<ExpenseSplit> CalculateSharesSplit(AddExpenseRequest request, Guid expenseId)
+    {
+        var totalShares = request.Splits.Sum(s => s.Shares!.Value);
+
+        // Calculate base amounts using integer division
+        var baseAmounts = request.Splits.Select(s => (s.Shares!.Value * request.AmountMinor) / totalShares).ToList();
+        long assignedTotal = baseAmounts.Sum();
+        var remainder = request.AmountMinor - assignedTotal;
+
+        // Distribute remainder to first N participants (N = remainder)
+        var splits = new List<ExpenseSplit>(request.Splits.Count);
+        for (int i = 0; i < request.Splits.Count; i++)
+        {
+            var split = request.Splits[i];
+            var amount = baseAmounts[i] + (i < remainder ? 1 : 0);
+
+            splits.Add(new ExpenseSplit
+            {
+                ExpenseId = expenseId,
+                UserId = split.UserId,
+                AmountMinor = amount,
+                Shares = split.Shares,
             });
         }
 
