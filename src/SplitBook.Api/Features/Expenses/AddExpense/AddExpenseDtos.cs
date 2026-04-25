@@ -27,7 +27,8 @@ public record ExpenseDto(
     DateOnly OccurredOn,
     string SplitMethod,
     List<ExpenseSplitDto> Splits,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    long Version
 );
 
 public record ExpenseSplitDto(

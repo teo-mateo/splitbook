@@ -2,45 +2,69 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SplitBook.Api.Domain;
+using SplitBook.Api.Features.Expenses.AddExpense;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 
-namespace SplitBook.Api.Features.Expenses.AddExpense;
+namespace SplitBook.Api.Features.Expenses.EditExpense;
 
-public static class AddExpenseHandler
+public static class EditExpenseHandler
 {
-    public static async Task<Results<Created<ExpenseDto>, ProblemHttpResult>> HandleAsync(
-        Guid id,
+    public static async Task<Results<Ok<ExpenseDto>, ProblemHttpResult>> HandleAsync(
+        Guid groupId,
+        Guid expenseId,
         AddExpenseRequest request,
         HttpContext httpContext,
         CurrentUserAccessor currentUserAccessor,
         AppDbContext context)
     {
-        // Idempotency check (with 24h window)
-        var idempotencyKey = httpContext.Request.Headers["Idempotency-Key"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(idempotencyKey))
-        {
-            var existing = await context.Expenses
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(e => e.IdempotencyKey == idempotencyKey);
-            if (existing != null && existing.CreatedAt > DateTimeOffset.UtcNow.AddHours(-24))
-            {
-                return MapToCreated(existing, context);
-            }
-        }
-
         // Validate caller is a member of the group
         var currentUser = currentUserAccessor.GetCurrentUser(httpContext);
         var membership = await context.Memberships
-            .FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == currentUser.Id && m.RemovedAt == null);
+            .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == currentUser.Id && m.RemovedAt == null);
         if (membership == null)
         {
             return TypedResults.Problem(title: "Not Found", statusCode: 404);
         }
 
+        // Fetch the expense
+        var expense = await context.Expenses
+            .FirstOrDefaultAsync(e => e.Id == expenseId && e.GroupId == groupId);
+        if (expense == null)
+        {
+            return TypedResults.Problem(title: "Not Found", statusCode: 404);
+        }
+
+        // Check If-Match header for optimistic concurrency
+        var ifMatch = httpContext.Request.Headers.IfMatch;
+        if (ifMatch.Count == 0)
+        {
+            return TypedResults.Problem(
+                title: "Precondition Failed",
+                detail: "If-Match header is required for editing expenses",
+                statusCode: 412);
+        }
+
+        var etagValue = ifMatch[0];
+        if (etagValue == null)
+        {
+            return TypedResults.Problem(
+                title: "Precondition Failed",
+                detail: "If-Match header value is invalid",
+                statusCode: 412);
+        }
+        var versionString = etagValue.Trim('"');
+        if (!long.TryParse(versionString, out var requestedVersion) || requestedVersion != expense.Version)
+        {
+            return TypedResults.Problem(
+                title: "Precondition Failed",
+                detail: "The expense has been modified by another request. Please refresh and try again.",
+                statusCode: 412);
+        }
+
         // Fetch group for currency validation
         var group = await context.Groups
-            .FirstOrDefaultAsync(g => g.Id == id);
+            .FirstOrDefaultAsync(g => g.Id == groupId);
         if (group == null)
         {
             return TypedResults.Problem(title: "Not Found", statusCode: 404);
@@ -143,7 +167,7 @@ public static class AddExpenseHandler
 
         // Batch-load active memberships for this group and these users
         var activeMemberships = await context.Memberships
-            .Where(m => m.GroupId == id && participantUserIds.Contains(m.UserId) && m.RemovedAt == null)
+            .Where(m => m.GroupId == groupId && participantUserIds.Contains(m.UserId) && m.RemovedAt == null)
             .ToListAsync();
 
         var activeMemberIds = new HashSet<Guid>(activeMemberships.Select(m => m.UserId));
@@ -163,35 +187,34 @@ public static class AddExpenseHandler
             }
         }
 
-        // Build expense entity
-        var expense = new Expense
-        {
-            Id = Guid.NewGuid(),
-            GroupId = id,
-            PayerUserId = request.PayerUserId,
-            AmountMinor = request.AmountMinor,
-            Currency = group.Currency,
-            Description = request.Description,
-            OccurredOn = request.OccurredOn,
-            SplitMethod = splitMethod,
-            CreatedAt = DateTimeOffset.UtcNow,
-            IdempotencyKey = idempotencyKey,
-        };
+        // Update expense entity
+        expense.PayerUserId = request.PayerUserId;
+        expense.AmountMinor = request.AmountMinor;
+        expense.Currency = group.Currency;
+        expense.Description = request.Description;
+        expense.OccurredOn = request.OccurredOn;
+        expense.SplitMethod = splitMethod;
+        expense.Version += 1;
 
-        context.Expenses.Add(expense);
+        // Replace ExpenseSplit rows
+        var existingSplits = await context.ExpenseSplits
+            .Where(es => es.ExpenseId == expenseId)
+            .ToListAsync();
+        context.ExpenseSplits.RemoveRange(existingSplits);
 
-        var splits = splitMethod switch
+        var newSplits = splitMethod switch
         {
-            SplitMethod.Equal => CalculateEqualSplit(request, expense.Id),
-            SplitMethod.Exact => CalculateExactSplit(request, expense.Id),
-            SplitMethod.Percentage => CalculatePercentageSplit(request, expense.Id),
-            SplitMethod.Shares => CalculateSharesSplit(request, expense.Id),
+            SplitMethod.Equal => CalculateEqualSplit(request, expenseId),
+            SplitMethod.Exact => CalculateExactSplit(request, expenseId),
+            SplitMethod.Percentage => CalculatePercentageSplit(request, expenseId),
+            SplitMethod.Shares => CalculateSharesSplit(request, expenseId),
             _ => throw new InvalidOperationException($"Unhandled split method: {splitMethod}")
         };
-        context.ExpenseSplits.AddRange(splits);
+        context.ExpenseSplits.AddRange(newSplits);
+
         await context.SaveChangesAsync();
 
-        return MapToCreated(expense, context);
+        return TypedResults.Ok(MapToDto(expense, context));
     }
 
     private static List<ExpenseSplit> CalculateEqualSplit(AddExpenseRequest request, Guid expenseId)
@@ -234,14 +257,12 @@ public static class AddExpenseHandler
 
     private static List<ExpenseSplit> CalculatePercentageSplit(AddExpenseRequest request, Guid expenseId)
     {
-        // Calculate base amounts using rounded percentage of total
         var baseAmounts = request.Splits
             .Select(s => (long)Math.Round(s.Percentage!.Value / 100.0 * request.AmountMinor))
             .ToList();
         long assignedTotal = baseAmounts.Sum();
         var remainder = request.AmountMinor - assignedTotal;
 
-        // Distribute remainder to first N participants (N = remainder)
         var splits = new List<ExpenseSplit>(request.Splits.Count);
         for (int i = 0; i < request.Splits.Count; i++)
         {
@@ -264,12 +285,10 @@ public static class AddExpenseHandler
     {
         var totalShares = request.Splits.Sum(s => s.Shares!.Value);
 
-        // Calculate base amounts using integer division
         var baseAmounts = request.Splits.Select(s => (s.Shares!.Value * request.AmountMinor) / totalShares).ToList();
         long assignedTotal = baseAmounts.Sum();
         var remainder = request.AmountMinor - assignedTotal;
 
-        // Distribute remainder to first N participants (N = remainder)
         var splits = new List<ExpenseSplit>(request.Splits.Count);
         for (int i = 0; i < request.Splits.Count; i++)
         {
@@ -288,7 +307,7 @@ public static class AddExpenseHandler
         return splits;
     }
 
-    private static Created<ExpenseDto> MapToCreated(Expense expense, AppDbContext context)
+    private static ExpenseDto MapToDto(Expense expense, AppDbContext context)
     {
         var splits = context.ExpenseSplits
             .Where(es => es.ExpenseId == expense.Id)
@@ -296,7 +315,7 @@ public static class AddExpenseHandler
             .Select(es => new ExpenseSplitDto(es.UserId, es.AmountMinor))
             .ToList();
 
-        var dto = new ExpenseDto(
+        return new ExpenseDto(
             expense.Id,
             expense.GroupId,
             expense.PayerUserId,
@@ -309,7 +328,5 @@ public static class AddExpenseHandler
             expense.CreatedAt,
             expense.Version
         );
-
-        return TypedResults.Created($"/groups/{expense.GroupId}/expenses/{expense.Id}", dto);
     }
 }

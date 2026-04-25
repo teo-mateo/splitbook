@@ -78,7 +78,8 @@ public static class ListExpensesHandler
                 expense.OccurredOn,
                 expense.SplitMethod.ToString(),
                 splits,
-                expense.CreatedAt
+                expense.CreatedAt,
+                expense.Version
             );
             items.Add(dto);
         }
