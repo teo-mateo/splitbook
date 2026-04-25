@@ -38,7 +38,7 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         // Act
         var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        var result = await response.ReadJsonAsync<LoginResponse>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -86,7 +86,7 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         // Act
         var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        var result = await response.ReadJsonAsync<LoginResponse>();
 
         // Assert
         result.Should().NotBeNull();
@@ -131,7 +131,7 @@ public class LoginEndpointTests : IClassFixture<AppFactory>
         // Act
         var loginRequest = new LoginRequest(email, password);
         var response = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        var result = await response.ReadJsonAsync<LoginResponse>();
 
         // Assert
         result.Should().NotBeNull();

@@ -38,7 +38,7 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
         // Login
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
 
         return loginResult!.AccessToken;
     }
@@ -63,7 +63,7 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync("/groups", request);
-        var result = await response.Content.ReadFromJsonAsync<GroupDto>();
+        var result = await response.ReadJsonAsync<GroupDto>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -83,7 +83,7 @@ public class CreateGroupEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync("/groups", request);
-        var result = await response.Content.ReadFromJsonAsync<GroupDto>();
+        var result = await response.ReadJsonAsync<GroupDto>();
         var groupId = result!.Id;
 
         // Assert — response succeeded

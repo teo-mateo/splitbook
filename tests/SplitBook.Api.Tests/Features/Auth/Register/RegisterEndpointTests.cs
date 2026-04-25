@@ -30,7 +30,7 @@ public class RegisterEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync("/auth/register", request);
-        var result = await response.Content.ReadFromJsonAsync<RegisterResponse>();
+        var result = await response.ReadJsonAsync<RegisterResponse>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -54,7 +54,7 @@ public class RegisterEndpointTests : IClassFixture<AppFactory>
         // Act — login with the same credentials
         var loginRequest = new LoginRequest("bob@example.com", "BobPass123!");
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
 
         // Assert
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -131,7 +131,7 @@ public class RegisterEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync("/auth/register", request);
-        var result = await response.Content.ReadFromJsonAsync<RegisterResponse>();
+        var result = await response.ReadJsonAsync<RegisterResponse>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);

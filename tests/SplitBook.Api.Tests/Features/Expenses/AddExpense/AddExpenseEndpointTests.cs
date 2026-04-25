@@ -32,12 +32,12 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var registerRequest = new RegisterRequest(email, "TestUser", password);
         var registerResponse = await client.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
-        var registerResult = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
+        var registerResult = await registerResponse.ReadJsonAsync<RegisterResponse>();
         var userId = registerResult!.Id;
 
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
 
         return (loginResult!.AccessToken, userId);
     }
@@ -57,7 +57,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userId) = await CreateAuthClientAsync("expenseuser@example.com", "ExpensePass123!");
         var createGroupRequest = new CreateGroupRequest("Dinner Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var expenseRequest = new AddExpenseRequest(
@@ -75,7 +75,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -100,7 +100,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // Create group and add user B
         var createGroupRequest = new CreateGroupRequest("Split Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var addMemberRequest = new AddMemberRequest("splituser_b@example.com");
@@ -123,7 +123,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP response
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -153,7 +153,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // Create group and add users B and C
         var createGroupRequest = new CreateGroupRequest("Rounding Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var addMemberB = new AddMemberRequest("round_b@example.com");
@@ -180,7 +180,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP response
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -207,7 +207,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (clientA, userIdA) = await CreateAuthClientAsync("nonmember_a@example.com", "NonMemberPass123!");
         var createGroupRequest = new CreateGroupRequest("Private Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Register and log in as user B (not a member of the group)
@@ -266,7 +266,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userId) = await CreateAuthClientAsync("validation_zero@example.com", "ValidPass123!");
         var createGroupRequest = new CreateGroupRequest("Validation Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var expenseRequest = new AddExpenseRequest(
@@ -303,7 +303,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userId) = await CreateAuthClientAsync("idempotency_user@example.com", "IdempPass123!");
         var createGroupRequest = new CreateGroupRequest("Idempotency Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var expenseRequest = new AddExpenseRequest(
@@ -329,7 +329,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         };
         request1.Headers.Add("Idempotency-Key", idempotencyKey);
         var response1 = await client.SendAsync(request1);
-        var result1 = await response1.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result1 = await response1.ReadJsonAsync<ExpenseDto>();
 
         // Act — second POST with the same Idempotency-Key and identical body
         var request2 = new HttpRequestMessage(HttpMethod.Post, $"/groups/{groupId}/expenses")
@@ -338,7 +338,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         };
         request2.Headers.Add("Idempotency-Key", idempotencyKey);
         var response2 = await client.SendAsync(request2);
-        var result2 = await response2.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result2 = await response2.ReadJsonAsync<ExpenseDto>();
 
         // Assert — both return 201
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -365,7 +365,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userId) = await CreateAuthClientAsync("no_idempotency_user@example.com", "NoIdempPass123!");
         var createGroupRequest = new CreateGroupRequest("No Idempotency Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var expenseRequest = new AddExpenseRequest(
@@ -383,11 +383,11 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act — first POST without Idempotency-Key
         var response1 = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result1 = await response1.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result1 = await response1.ReadJsonAsync<ExpenseDto>();
 
         // Act — second POST without Idempotency-Key (same body)
         var response2 = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result2 = await response2.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result2 = await response2.ReadJsonAsync<ExpenseDto>();
 
         // Assert — both return 201 Created
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -417,7 +417,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // Create group and add user B
         var createGroupRequest = new CreateGroupRequest("Exact Split Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var addMemberRequest = new AddMemberRequest("exact_split_user_b@example.com");
@@ -441,7 +441,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP 201 Created
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -479,7 +479,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // User A creates a group — only A is a member
         var createGroupRequest = new CreateGroupRequest("Payer Check Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // User A tries to add an expense where payer is user B (not a member of the group)
@@ -515,7 +515,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userIdA) = await CreateAuthClientAsync("exact_split_sum_user@example.com", "ExactSumPass123!");
         var createGroupRequest = new CreateGroupRequest("Exact Sum Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Total = 6000 but splits sum to 5000 (3000 + 2000) — mismatch
@@ -554,7 +554,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userIdA) = await CreateAuthClientAsync("exact_split_null_user@example.com", "ExactNullPass123!");
         var createGroupRequest = new CreateGroupRequest("Exact Null Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Total = 6000 but the single split has AmountMinor = null — invalid for Exact split
@@ -595,7 +595,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // Create group and add user B
         var createGroupRequest = new CreateGroupRequest("Exact Response Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var addMemberRequest = new AddMemberRequest("exact_response_user_b@example.com");
@@ -619,7 +619,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP 201 Created
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -646,7 +646,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         // Create group and add user B
         var createGroupRequest = new CreateGroupRequest("Exact DB Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         var addMemberRequest = new AddMemberRequest("exact_db_b@example.com");
@@ -670,7 +670,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP 201 Created
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -699,7 +699,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
         var (client, userIdA) = await CreateAuthClientAsync("exact_single_user@example.com", "ExactSinglePass123!");
         var createGroupRequest = new CreateGroupRequest("Exact Single Group", "EUR");
         var createGroupResponse = await client.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Total = 5000; single participant (user A) owes the full 5000
@@ -718,7 +718,7 @@ public class AddExpenseEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.PostAsJsonAsync($"/groups/{groupId}/expenses", expenseRequest);
-        var result = await response.Content.ReadFromJsonAsync<ExpenseDto>();
+        var result = await response.ReadJsonAsync<ExpenseDto>();
 
         // Assert — HTTP 201 Created
         response.StatusCode.Should().Be(HttpStatusCode.Created);

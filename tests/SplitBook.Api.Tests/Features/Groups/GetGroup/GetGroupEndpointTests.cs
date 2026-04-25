@@ -55,13 +55,13 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createBody = await createResponse.ReadJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
         // Act
         var response = await client.GetAsync($"/groups/{groupId}");
-        var body = await response.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var body = await response.ReadJsonAsync<GroupDetailDto>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -87,7 +87,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var registerResponse = await client.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
+        var registerBody = await registerResponse.ReadJsonAsync<RegisterResponse>();
         registerBody.Should().NotBeNull();
         var creatorUserId = registerBody!.Id;
 
@@ -104,13 +104,13 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createBody = await createResponse.ReadJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
         // Act
         var response = await client.GetAsync($"/groups/{groupId}");
-        var body = await response.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var body = await response.ReadJsonAsync<GroupDetailDto>();
 
         // Assert — members array contains the creator's user ID
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -127,7 +127,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await clientA.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createBody = await createResponse.ReadJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -184,7 +184,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var createResponse = await clientA.PostAsJsonAsync("/groups", createRequest);
         createResponse.EnsureSuccessStatusCode();
 
-        var createBody = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createBody = await createResponse.ReadJsonAsync<GroupDto>();
         createBody.Should().NotBeNull();
         var groupId = createBody!.Id;
 
@@ -197,7 +197,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
         var registerResponse = await clientB.PostAsJsonAsync("/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
+        var registerBody = await registerResponse.ReadJsonAsync<RegisterResponse>();
         registerBody.Should().NotBeNull();
         var userIdB = registerBody!.Id;
 
@@ -217,7 +217,7 @@ public class GetGroupEndpointTests : IClassFixture<AppFactory>
 
         // Act — user A reads the group detail
         var response = await clientA.GetAsync($"/groups/{groupId}");
-        var body = await response.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var body = await response.ReadJsonAsync<GroupDetailDto>();
 
         // Assert — removed member B should NOT appear in the members array
         response.StatusCode.Should().Be(HttpStatusCode.OK);

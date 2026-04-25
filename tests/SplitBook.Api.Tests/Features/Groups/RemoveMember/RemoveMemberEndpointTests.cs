@@ -29,7 +29,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
         return loginResult!.AccessToken;
     }
 
@@ -62,7 +62,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
         // Log in as user A and create a group
         var clientA = await CreateAuthClientAsync(emailA, passwordA);
         var groupResponse = await clientA.PostAsJsonAsync("/groups", new CreateGroupRequest("Test Group", "EUR"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Add user B to the group
@@ -71,7 +71,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
 
         // Get group detail to find user B's userId
         var detailResponse = await clientA.GetAsync($"/groups/{groupId}");
-        var groupDetail = await detailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var groupDetail = await detailResponse.ReadJsonAsync<GroupDetailDto>();
         var userBId = groupDetail!.Members.Single(m => m.DisplayName == "UserB").UserId;
 
         // Act — remove user B
@@ -82,7 +82,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
 
         // Assert — user B is no longer in the group (only user A remains)
         var afterDetailResponse = await clientA.GetAsync($"/groups/{groupId}");
-        var afterDetail = await afterDetailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var afterDetail = await afterDetailResponse.ReadJsonAsync<GroupDetailDto>();
         afterDetail!.Members.Should().HaveCount(1);
         afterDetail.Members.Single().UserId.Should().NotBe(userBId);
     }
@@ -103,7 +103,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
         // User A creates a group
         var clientA = await CreateAuthClientAsync(emailA, passwordA);
         var groupResponse = await clientA.PostAsJsonAsync("/groups", new CreateGroupRequest("CallerNot Group", "EUR"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Act — user C (not a member) tries to remove a member
@@ -152,7 +152,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
 
         var clientA = await CreateAuthClientAsync(emailA, passwordA);
         var groupResponse = await clientA.PostAsJsonAsync("/groups", new CreateGroupRequest("UserNot Group", "EUR"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Add B to the group
@@ -165,10 +165,10 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
         // Let's get C's ID by having C create a throwaway group and reading the creator ID.
         var clientC = await CreateAuthClientAsync(emailC, passwordC);
         var throwawayGroup = await clientC.PostAsJsonAsync("/groups", new CreateGroupRequest("Throwaway", "USD"));
-        var throwawayDto = await throwawayGroup.Content.ReadFromJsonAsync<GroupDto>();
+        var throwawayDto = await throwawayGroup.ReadJsonAsync<GroupDto>();
         // Actually, GroupDto doesn't have creator info. Get it from group detail.
         var throwawayDetail = await clientC.GetAsync($"/groups/{throwawayDto!.Id}");
-        var throwawayDetailDto = await throwawayDetail.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var throwawayDetailDto = await throwawayDetail.ReadJsonAsync<GroupDetailDto>();
         var userCId = throwawayDetailDto!.Members.Single(m => m.DisplayName == "UserC").UserId;
 
         // Act — user A tries to remove user C (not a member of the group)
@@ -208,7 +208,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
 
         var clientA = await CreateAuthClientAsync(emailA, passwordA);
         var groupResponse = await clientA.PostAsJsonAsync("/groups", new CreateGroupRequest("RemoveSelf Group", "EUR"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Add B to the group
@@ -216,7 +216,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
 
         // Get group detail to find user IDs
         var detailResponse = await clientA.GetAsync($"/groups/{groupId}");
-        var groupDetail = await detailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var groupDetail = await detailResponse.ReadJsonAsync<GroupDetailDto>();
         var userAId = groupDetail!.Members.Single(m => m.DisplayName == "UserA").UserId;
         var userBId = groupDetail.Members.Single(m => m.DisplayName == "UserB").UserId;
 
@@ -230,7 +230,7 @@ public class RemoveMemberEndpointTests : IClassFixture<AppFactory>
         // Assert — B no longer in members, A still there
         var afterDetailResponse = await clientA.GetAsync($"/groups/{groupId}");
         afterDetailResponse.EnsureSuccessStatusCode();
-        var afterDetail = await afterDetailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var afterDetail = await afterDetailResponse.ReadJsonAsync<GroupDetailDto>();
         afterDetail.Should().NotBeNull();
         afterDetail!.Members.Should().HaveCount(1);
         afterDetail.Members.Single().UserId.Should().Be(userAId);

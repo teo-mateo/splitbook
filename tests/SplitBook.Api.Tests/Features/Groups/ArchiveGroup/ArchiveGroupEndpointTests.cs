@@ -25,7 +25,7 @@ public class ArchiveGroupEndpointTests : IClassFixture<AppFactory>
         var client = _factory.CreateClient();
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
         return loginResult!.AccessToken;
     }
 
@@ -49,7 +49,7 @@ public class ArchiveGroupEndpointTests : IClassFixture<AppFactory>
 
         var client = await CreateAuthClientAsync(email, password);
         var groupResponse = await client.PostAsJsonAsync("/groups", new CreateGroupRequest("Archive Me", "EUR"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Act — archive the group
@@ -61,7 +61,7 @@ public class ArchiveGroupEndpointTests : IClassFixture<AppFactory>
         // Assert — ArchivedAt is now set (non-null) via GET /groups/{id}
         var detailResponse = await client.GetAsync($"/groups/{groupId}");
         detailResponse.EnsureSuccessStatusCode();
-        var groupDetail = await detailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var groupDetail = await detailResponse.ReadJsonAsync<GroupDetailDto>();
         groupDetail.Should().NotBeNull();
         groupDetail!.ArchivedAt.Should().NotBeNull();
     }
@@ -115,7 +115,7 @@ public class ArchiveGroupEndpointTests : IClassFixture<AppFactory>
         // User A creates a group (A becomes the only member)
         var clientA = await CreateAuthClientAsync(emailA, password);
         var groupResponse = await clientA.PostAsJsonAsync("/groups", new CreateGroupRequest("Not My Group", "USD"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // User C (not a member) tries to archive the group
@@ -140,7 +140,7 @@ public class ArchiveGroupEndpointTests : IClassFixture<AppFactory>
 
         var client = await CreateAuthClientAsync(email, password);
         var groupResponse = await client.PostAsJsonAsync("/groups", new CreateGroupRequest("Archive Twice", "GBP"));
-        var groupDto = await groupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await groupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Archive the group once

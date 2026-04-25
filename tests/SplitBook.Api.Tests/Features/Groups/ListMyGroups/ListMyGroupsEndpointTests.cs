@@ -33,7 +33,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
 
         return loginResult!.AccessToken;
     }
@@ -67,7 +67,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -86,7 +86,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -108,7 +108,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -131,7 +131,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await clientB.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -146,7 +146,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
         var client = await CreateAuthClientAsync("removed@example.com", "Removed123!");
         var createRequest = new CreateGroupRequest("Removed Group", "USD");
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
-        var createResult = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createResult = await createResponse.ReadJsonAsync<GroupDto>();
         var groupId = createResult!.Id;
 
         // Get the user's ID from the DB
@@ -164,7 +164,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -182,7 +182,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -206,7 +206,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
         var client = await CreateAuthClientAsync("archived@example.com", "Archived123!");
         var createRequest = new CreateGroupRequest("Archived Group", "CHF");
         var createResponse = await client.PostAsJsonAsync("/groups", createRequest);
-        var createResult = await createResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var createResult = await createResponse.ReadJsonAsync<GroupDto>();
         var groupId = createResult!.Id;
 
         // Set ArchivedAt on the group
@@ -219,7 +219,7 @@ public class ListMyGroupsEndpointTests : IClassFixture<AppFactory>
 
         // Act
         var response = await client.GetAsync("/groups");
-        var result = await response.Content.ReadFromJsonAsync<List<GroupDto>>();
+        var result = await response.ReadJsonAsync<List<GroupDto>>();
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

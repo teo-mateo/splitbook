@@ -31,7 +31,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
 
         var loginRequest = new LoginRequest(email, password);
         var loginResponse = await client.PostAsJsonAsync("/auth/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var loginResult = await loginResponse.ReadJsonAsync<LoginResponse>();
 
         return loginResult!.AccessToken;
     }
@@ -60,7 +60,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
         var createGroupRequest = new CreateGroupRequest("Add Member Test Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
         createGroupResponse.EnsureSuccessStatusCode();
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         groupDto.Should().NotBeNull();
         var groupId = groupDto!.Id;
 
@@ -73,7 +73,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
 
         // Assert — GET /groups/{id} includes user B in members
         var groupDetailResponse = await clientA.GetAsync($"/groups/{groupId}");
-        var groupDetail = await groupDetailResponse.Content.ReadFromJsonAsync<GroupDetailDto>();
+        var groupDetail = await groupDetailResponse.ReadJsonAsync<GroupDetailDto>();
 
         groupDetailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         groupDetail.Should().NotBeNull();
@@ -98,7 +98,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
         var createGroupRequest = new CreateGroupRequest("Not Member Test Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
         createGroupResponse.EnsureSuccessStatusCode();
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         groupDto.Should().NotBeNull();
         var groupId = groupDto!.Id;
 
@@ -134,7 +134,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
         var createGroupRequest = new CreateGroupRequest("Email Not Found Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
         createGroupResponse.EnsureSuccessStatusCode();
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         groupDto.Should().NotBeNull();
         var groupId = groupDto!.Id;
 
@@ -161,7 +161,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
         var createGroupRequest = new CreateGroupRequest("Already Member Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
         createGroupResponse.EnsureSuccessStatusCode();
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         groupDto.Should().NotBeNull();
         var groupId = groupDto!.Id;
 
@@ -201,7 +201,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
         var createGroupRequest = new CreateGroupRequest("Invalid Email Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
         createGroupResponse.EnsureSuccessStatusCode();
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         groupDto.Should().NotBeNull();
         var groupId = groupDto!.Id;
 
@@ -230,7 +230,7 @@ public class AddMemberEndpointTests : IClassFixture<AppFactory>
 
         var createGroupRequest = new CreateGroupRequest("Problem JSON Group", "EUR");
         var createGroupResponse = await clientA.PostAsJsonAsync("/groups", createGroupRequest);
-        var groupDto = await createGroupResponse.Content.ReadFromJsonAsync<GroupDto>();
+        var groupDto = await createGroupResponse.ReadJsonAsync<GroupDto>();
         var groupId = groupDto!.Id;
 
         // Act — user B (not a member) tries to add user C
