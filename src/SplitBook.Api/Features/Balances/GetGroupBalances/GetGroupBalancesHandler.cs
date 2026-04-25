@@ -37,7 +37,11 @@ public static class GetGroupBalancesHandler
             .Where(es => expenses.Select(e => e.Id).Contains(es.ExpenseId))
             .ToListAsync();
 
-        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits);
+        var settlements = await context.Settlements
+            .Where(s => s.GroupId == groupId)
+            .ToListAsync();
+
+        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits, settlements);
 
         var dtos = balances.Select(b => new BalanceDto(b.UserId, b.NetAmountMinor)).ToList();
 

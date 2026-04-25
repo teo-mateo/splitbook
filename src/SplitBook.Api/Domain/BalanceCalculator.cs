@@ -9,7 +9,8 @@ public static class BalanceCalculator
     public static List<(Guid UserId, long NetAmountMinor)> Calculate(
         List<Guid> memberIds,
         List<Expense> expenses,
-        List<ExpenseSplit> splits)
+        List<ExpenseSplit> splits,
+        List<Settlement> settlements)
     {
         var balanceByUser = new Dictionary<Guid, long>();
         foreach (var memberId in memberIds)
@@ -17,23 +18,36 @@ public static class BalanceCalculator
             balanceByUser[memberId] = 0;
         }
 
+        // Expenses: payer gets credit for full amount, each participant gets debited by their share
         foreach (var expense in expenses)
         {
             var expenseSplits = splits.Where(s => s.ExpenseId == expense.Id).ToList();
 
-            // The payer gets credit for the full expense amount
             if (balanceByUser.ContainsKey(expense.PayerUserId))
             {
                 balanceByUser[expense.PayerUserId] += expense.AmountMinor;
             }
 
-            // Each participant gets debited by their share
             foreach (var split in expenseSplits)
             {
                 if (balanceByUser.ContainsKey(split.UserId))
                 {
                     balanceByUser[split.UserId] -= split.AmountMinor;
                 }
+            }
+        }
+
+        // Settlements: fromUserId pays toUserId — fromUserId balance increases (they paid), toUserId balance decreases (they received)
+        foreach (var settlement in settlements)
+        {
+            if (balanceByUser.ContainsKey(settlement.FromUserId))
+            {
+                balanceByUser[settlement.FromUserId] += settlement.AmountMinor;
+            }
+
+            if (balanceByUser.ContainsKey(settlement.ToUserId))
+            {
+                balanceByUser[settlement.ToUserId] -= settlement.AmountMinor;
             }
         }
 

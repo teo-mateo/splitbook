@@ -32,7 +32,7 @@ public class BalanceCalculatorTests
         var expenses = new List<Expense> { expense };
 
         // Act
-        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits);
+        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits, new List<Settlement>());
 
         // Assert
         var userABalance = balances.Single(b => b.UserId == userA);
@@ -89,7 +89,7 @@ public class BalanceCalculatorTests
         var memberIds = new List<Guid> { userA, userB, userC };
 
         // Act
-        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits);
+        var balances = BalanceCalculator.Calculate(memberIds, expenses, splits, new List<Settlement>());
 
         // Assert — invariant: balances must sum to zero
         balances.Sum(b => b.NetAmountMinor).Should().Be(0L);
