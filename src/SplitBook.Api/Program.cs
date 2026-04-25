@@ -12,6 +12,7 @@ using SplitBook.Api.Features.Groups.ArchiveGroup;
 using SplitBook.Api.Features.Expenses.AddExpense;
 using SplitBook.Api.Features.Expenses.ListExpenses;
 using SplitBook.Api.Features.Expenses.EditExpense;
+using SplitBook.Api.Features.Expenses.DeleteExpense;
 using SplitBook.Api.Infrastructure.Auth;
 using SplitBook.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -109,6 +110,7 @@ try
     groups.MapAddExpense();
     groups.MapListExpenses();
     groups.MapEditExpense();
+    groups.MapDeleteExpense();
 
     app.Run();
     return 0;
