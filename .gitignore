@@ -22,3 +22,16 @@ coverage.*.xml
 # opencode / claude operator state
 .opencode/logs/
 .claude/
+
+# Frontend — SplitBook.Web
+src/SplitBook.Web/node_modules/
+src/SplitBook.Web/dist/
+src/SplitBook.Web/*.tsbuildinfo
+src/SplitBook.Web/playwright-report/
+src/SplitBook.Web/test-results/
+src/SplitBook.Web/coverage/
+
+# Harness per-run launch logs ONLY.
+# Slice session logs (harness/logs/*.md, harness/logs/frontend/*.md) are the
+# experiment deliverable and MUST stay tracked — the autopilot commits them.
+harness/logs/runs/

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "heapzilla": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Heapzilla vLLM",
+      "options": {
+        "baseURL": "http://localhost:3301/v1",
+        "apiKey": "{env:HEAPZILLA_API_KEY}"
+      },
+      "models": {
+        "vllm-qwen3-6-27b-fp8": {
+          "name": "Qwen3.6-27B-FP8 (local)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 0.0,
+            "repetition_penalty": 1.0
+          }
+        },
+        "vllm-qwen3.6-35b-a3b": {
+          "name": "Qwen3.6-35B-A3B (local)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768,
+            "temperature": 0.2,
+            "top_p": 0.9
+          }
+        },
+        "vllm-gemma-4-31b-fp8": {
+          "name": "Gemma-4-31B-FP8 (local)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768,
+            "temperature": 0.2,
+            "top_p": 0.9
+          }
+        }
+      }
+    },
+    "OpenRouter": {
+      "models": {
+        "anthropic/claude-haiku-4.5": {
+          "name": "Claude Haiku 4.5 (OpenRouter)",
+          "tools": true,
+          "reasoning": true,
+          "options": {
+            "max_tokens": 32768
+          }
+        }
+      }
+    }
+  },
+  "model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "small_model": "heapzilla/vllm-qwen3-6-27b-fp8",
+  "instructions": [
+    "specs/product-spec.md",
+    "specs/technical-spec.md",
+    "specs/slice-plan.md",
+    "DECISIONS.md",
+    "harness/README.md",
+    "harness/LESSONS.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "task": {
+      "*": "ask",
+      "spec-auditor": "allow",
+      "test-writer": "allow",
+      "reviewer": "allow",
+      "lessons-scribe": "allow",
+      "researcher": "allow"
+    },
+    "bash": {
+      "dotnet *": "allow",
+      "DOTNET_*=* *": "allow",
+      "ASPNETCORE_*=* *": "allow",
+      "scripts/app.sh*": "allow",
+      "./scripts/app.sh*": "allow",
+      "bash scripts/app.sh*": "allow",
+      "bash ./scripts/app.sh*": "allow",
+      "sh scripts/app.sh*": "allow",
+      "git": "deny",
+      "git *": "deny",
+      "mkdir *": "allow",
+      "mv *": "allow",
+      "cp *": "allow",
+      "touch *": "allow",
+      "ls*": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "find *": "allow",
+      "grep *": "allow",
+      "rg *": "allow",
+      "wc *": "allow",
+      "echo *": "allow",
+      "pwd": "allow",
+      "true": "allow",
+      "true *": "allow",
+      "false": "allow",
+      "cd *": "allow",
+      "curl *": "allow",
+      "sleep *": "allow",
+      "timeout *": "allow",
+      "nohup *": "allow",
+      "kill *": "allow",
+      "killall *": "allow",
+      "pkill *": "allow",
+      "pgrep *": "allow",
+      "ps *": "allow",
+      "ss *": "allow",
+      "lsof *": "allow",
+      "stat *": "allow",
+      "awk *": "allow",
+      "sed *": "allow",
+      "tr *": "allow",
+      "tee *": "allow",
+      "date*": "allow",
+      "env": "allow",
+      "printenv*": "allow",
+      "which *": "allow",
+      "type *": "allow",
+      "basename *": "allow",
+      "dirname *": "allow",
+      "xargs *": "allow",
+      "diff *": "allow",
+      "xxd *": "allow",
+      "base64 *": "allow",
+      "jq *": "allow",
+      "python3 -c*": "allow",
+      "sort *": "allow",
+      "uniq *": "allow",
+      "rm *": "ask",
+      "rmdir *": "ask",
+      "wget *": "ask",
+      "sudo *": "ask",
+      "chmod *": "ask",
+      "npm *": "ask",
+      "bun *": "ask",
+      "*": "ask"
+    }
+  }
+}

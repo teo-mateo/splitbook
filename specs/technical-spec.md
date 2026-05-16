@@ -1,154 +1,210 @@
-# SplitBook — Technical Specification
+# SplitBook Frontend — Technical Specification
 
 ## 1. Stack
 
-- **.NET 8**, C# 12, nullable reference types enabled, `TreatWarningsAsErrors=true`.
-- **ASP.NET Core Minimal API** endpoints (preferred over MVC controllers for this style).
-- **Entity Framework Core 8** + **SQLite** provider (`Microsoft.EntityFrameworkCore.Sqlite`).
-- **MediatR** for the handler-per-slice pattern — optional; hand-written handlers are acceptable if MediatR adds friction.
-- **FluentValidation** for request validation.
-- **xUnit** + **FluentAssertions** + **Microsoft.AspNetCore.Mvc.Testing** (`WebApplicationFactory`) for integration tests. **Respawn** or simple in-memory-recreate for DB reset between tests.
-- **Serilog** for structured logging.
-- **JWT Bearer** via `Microsoft.AspNetCore.Authentication.JwtBearer`.
-- **BCrypt.Net-Next** for password hashing.
+- **React 18**, TypeScript 5, strict mode enabled (`strict: true` in `tsconfig.json`).
+- **Vite 5** as the build tool and dev server.
+- **React Router v6** for client-side routing.
+- **TanStack Query (React Query v5)** for server state (data fetching, caching, mutations).
+- **Zod** for runtime validation of API responses (defensive parsing, not client-side form validation).
+- **React Hook Form** + **Zod resolver** for form validation.
+- **Tailwind CSS 3** for styling. No component library (no shadcn, no MUI, no Chakra).
+- **Vitest** + **@testing-library/react** for unit and component tests.
+- **Playwright** for end-to-end tests against a real running API instance.
+- **msw (MSW 2)** for API mocking in unit/component tests.
 
 No other runtime dependencies without discussion.
 
-## 2. Solution layout (vertical slice)
+## 2. Project layout
 
 ```
 src/
-  SplitBook.Api/
-    Program.cs
-    Features/
-      Auth/
-        Register/               RegisterEndpoint.cs  RegisterHandler.cs  RegisterValidator.cs  RegisterTests.cs?
-        Login/                  ...
-      Groups/
-        CreateGroup/
-        ListMyGroups/
-        GetGroup/
-        AddMember/
-        RemoveMember/
-        ArchiveGroup/
-      Expenses/
-        AddExpense/
-        ListExpenses/
-        EditExpense/
-        DeleteExpense/
-      Settlements/
-        RecordSettlement/
-        ListSettlements/
-      Balances/
-        GetGroupBalances/
-        GetSimplifiedDebts/
-      Reports/
-        GetUserSummary/
-    Domain/
-      User.cs  Group.cs  Membership.cs  Expense.cs  ExpenseSplit.cs  Settlement.cs
-      SplitMethod.cs  Money.cs  BalanceCalculator.cs  DebtSimplifier.cs
-    Infrastructure/
-      Persistence/  AppDbContext.cs  Migrations/
-      Auth/         JwtTokenService.cs  PasswordHasher.cs  CurrentUserAccessor.cs
-      Http/         ProblemDetailsMiddleware.cs  CorrelationIdMiddleware.cs  IdempotencyStore.cs
-    appsettings.json
-tests/
-  SplitBook.Api.Tests/          # integration, mirrors Features/
-  SplitBook.Domain.Tests/       # pure unit tests for Money/BalanceCalculator/DebtSimplifier
-SplitBook.sln
+  SplitBook.Web/
+    index.html
+    package.json
+    tsconfig.json
+    vite.config.ts
+    tailwind.config.ts
+    postcss.config.js
+    src/
+      main.tsx                 # entry point
+      App.tsx                  # router setup, auth guard
+      routes.tsx               # route definitions
+      api/
+        client.ts              # fetch wrapper, JWT injection, error handling
+        types.ts               # API response types (Zod schemas)
+      features/
+        auth/
+          Login.tsx
+          Register.tsx
+          useAuth.ts           # hook: token storage, user info, logout
+          AuthGuard.tsx        # route guard component
+        groups/
+          GroupsList.tsx
+          GroupDetail.tsx
+          CreateGroup.tsx
+          AddMember.tsx
+          ArchiveGroup.tsx
+          RemoveMember.tsx
+        expenses/
+          ExpenseForm.tsx      # shared add/edit form
+          ExpenseList.tsx
+          ExpenseItem.tsx
+          SplitSelector.tsx    # Equal/Exact/Percentage/Shares UI
+        settlements/
+          SettlementForm.tsx
+          SettlementList.tsx
+        balances/
+          BalancesDisplay.tsx
+          SimplifiedDebts.tsx
+        profile/
+          Profile.tsx
+      components/
+        Button.tsx
+        Input.tsx
+        Select.tsx
+        Modal.tsx
+        Toast.tsx
+        CurrencyInput.tsx
+        DateInput.tsx
+      hooks/
+        useApi.ts              # generic data-fetching hook (thin wrapper)
+        useConfirm.ts          # confirmation dialog hook
+      lib/
+        money.ts               # minor↔major conversion, formatting
+        dates.ts               # DateOnly helpers
+        constants.ts           # API base URL, currency symbols
+    e2e/
+      fixtures/
+      auth.spec.ts
+      groups.spec.ts
+      expenses.spec.ts
+      settlements.spec.ts
+    public/
+      manifest.json
 ```
 
-**Slice rule:** a feature folder contains everything that feature needs — endpoint registration, request/response DTOs, validator, handler, and its tests. Cross-slice sharing is limited to `Domain/` and `Infrastructure/`. No shared "Services" layer.
+**Slice rule:** a feature folder contains everything that feature needs — components, hooks, tests. Cross-feature sharing is limited to `components/`, `hooks/`, `lib/`, and `api/`. No shared "services" layer.
 
-## 3. Domain model (ERD in prose)
+## 3. API integration
 
-- `User`: `Id (Guid)`, `Email (unique, lowercase)`, `DisplayName`, `PasswordHash`, `CreatedAt`.
-- `Group`: `Id`, `Name`, `Currency (3-letter ISO)`, `CreatedByUserId → User`, `CreatedAt`, `ArchivedAt?`, `RowVersion`.
-- `Membership`: `(GroupId, UserId)` composite PK, `JoinedAt`, `RemovedAt?`.
-- `Expense`: `Id`, `GroupId → Group`, `PayerUserId → User`, `AmountMinor (long)`, `Currency`, `Description`, `OccurredOn (DateOnly)`, `SplitMethod (enum)`, `CreatedAt`, `DeletedAt?`, `RowVersion`.
-- `ExpenseSplit`: `(ExpenseId, UserId)` PK, `AmountMinor`, `Percentage?`, `Shares?` — which fields are populated depends on `SplitMethod`.
-- `Settlement`: `Id`, `GroupId`, `FromUserId`, `ToUserId`, `AmountMinor`, `Currency`, `OccurredOn`, `CreatedAt`, `DeletedAt?`.
+### 3.1 HTTP client
 
-`Money` is a value type wrapping `(AmountMinor, Currency)` with arithmetic and a guard that prevents mixing currencies.
+`api/client.ts` wraps `fetch` with:
+- Base URL from `VITE_API_URL` env var (defaults to `http://localhost:5000`).
+- Automatic JWT injection from `localStorage` via `Authorization: Bearer <token>`.
+- Response parsing: 2xx responses return parsed JSON; non-2xx return a typed error with status + Problem+JSON body.
+- Retry: none in v1. Transient failures surface to the user.
 
-## 4. REST contract
+### 3.2 Type safety
 
-All responses are JSON; auth required except `/auth/register` and `/auth/login`. Errors use Problem+JSON.
+API response shapes are defined as Zod schemas in `api/types.ts`. Every API call parses its response through the matching schema. A parse failure is treated as a 500-level error (the API broke its contract).
 
-### Auth
-- `POST /auth/register` — `{email, displayName, password}` → `201 {id, email, displayName}`.
-- `POST /auth/login` — `{email, password}` → `200 {accessToken, expiresAt}`.
+Money fields (`amountMinor`, `netAmountMinor`, `grossAmountMinor`) are sent as JSON numbers. The maximum realistic value (€1 billion = 100,000,000,000 minor units) is well within JavaScript's safe integer range (±2⁵³ ≈ 9 quadrillion), so `z.number()` is sufficient — no BigInt needed.
 
-### Groups
-- `POST /groups` — `{name, currency}` → `201 GroupDto`.
-- `GET /groups` — list groups the caller belongs to → `200 [GroupDto]`.
-- `GET /groups/{id}` — group detail incl. members → `200 GroupDetailDto`.
-- `POST /groups/{id}/members` — `{email}` adds a user by email → `204`.
-- `DELETE /groups/{id}/members/{userId}` → `204` (fails if user has non-zero balance).
-- `POST /groups/{id}/archive` → `204` (fails if any non-zero balance).
+Example:
+```typescript
+const GroupDtoSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  currency: z.string().length(3),
+  memberCount: z.number().int().nonnegative(),
+});
+```
 
-### Expenses
-- `POST /groups/{groupId}/expenses` — headers: `Idempotency-Key` (optional). Body: `{payerUserId, amountMinor, currency, description, occurredOn, splitMethod, splits: [{userId, amountMinor?, percentage?, shares?}]}` → `201 ExpenseDto`.
-- `GET /groups/{groupId}/expenses?skip=&take=&from=&to=` → `200 {items, total}`.
-- `PUT /groups/{groupId}/expenses/{id}` — same body; requires `If-Match: <rowVersion>` → `200 ExpenseDto`.
-- `DELETE /groups/{groupId}/expenses/{id}` → `204` (soft delete).
+### 3.3 Server state
 
-### Settlements
-- `POST /groups/{groupId}/settlements` — headers: `Idempotency-Key`. Body: `{fromUserId, toUserId, amountMinor, currency, occurredOn}` → `201 SettlementDto`.
-- `GET /groups/{groupId}/settlements` → `200 [SettlementDto]`.
+TanStack Query handles:
+- Cache invalidation on mutations (e.g., after adding expense, invalidate `expenses` and `balances` queries for that group).
+- Background refetch on window focus (enabled globally).
+- Optimistic updates where the response is deterministic (e.g., settlement recording).
 
-### Balances / reports
-- `GET /groups/{groupId}/balances` → `200 [{userId, netAmountMinor}]` (sums to 0).
-- `GET /groups/{groupId}/simplified-debts` → `200 [{fromUserId, toUserId, amountMinor}]`.
-- `GET /users/me/summary` → `200 {groups: [{groupId, netAmountMinor, grossAmountMinor}]}`.
+### 3.4 Auth flow
 
-### Status/health
-- `GET /health` → `200 {status: "ok", version}`.
+- JWT stored in `localStorage` under key `splitbook_token`.
+- `useAuth` hook exposes `user`, `login`, `register`, `logout`, `isAuthenticated`.
+- `AuthGuard` wrapper component: if no valid token, redirect to `/login`.
+- On 401 from any API call, clear token and redirect to `/login?expired=true`.
 
-## 5. Auth, identity, and authorization
+## 4. Routing
 
-- JWT claims: `sub` (user id), `email`, `name`, `exp`, `iat`, `iss`, `aud`.
-- `CurrentUserAccessor` reads `HttpContext.User` and exposes a strongly typed `CurrentUser`.
-- Group-scoped endpoints enforce `caller ∈ group.Members` in the handler (not via policy) — makes the check explicit and testable within the slice.
-- Return `404` (not `403`) when the caller is not a member of a group, to avoid leaking existence.
+```
+/                    → GroupsList (guarded)
+/login               → Login
+/register            → Register
+/groups               → GroupsList (alias, guarded)
+/groups/:id           → GroupDetail (guarded)
+/groups/:id/expenses/new       → ExpenseForm (guarded)
+/groups/:id/expenses/:id/edit  → ExpenseForm (guarded)
+/groups/:id/settlements/new    → SettlementForm (guarded)
+/profile              → Profile (guarded)
+```
 
-## 6. Persistence conventions
+## 5. Styling conventions
 
-- All timestamps stored as UTC `DateTimeOffset`.
-- All money stored as `long` (minor units) + `string Currency` (3 chars, ISO).
-- `RowVersion` is a `uint` with `[Timestamp]`/`IsRowVersion()` mapped to SQLite via a manual trigger-emulation or a stored `long Ticks` if needed (acceptable simplification: use `long Version` and increment in `SaveChanges`).
-- Soft-deletes via `DeletedAt?`. Global query filter excludes soft-deleted rows.
-- Migrations committed into `Infrastructure/Persistence/Migrations/`.
+- **Tailwind CSS** with the default theme. No custom design system beyond utility classes.
+- **Mobile-first**: base styles target 320px width. Use `md:` and `lg:` breakpoints sparingly.
+- **Color coding for balances**: green (`text-green-600`) for positive (owed), red (`text-red-600`) for negative (owe), gray for zero.
+- **Spacing**: use Tailwind's default scale (0.25rem = 1 unit). No arbitrary values unless justified.
+- **Typography**: system font stack (Tailwind default). No external fonts.
 
-## 7. Test strategy
+## 6. Form handling
+
+All forms use React Hook Form with Zod resolver. Pattern:
+
+```typescript
+const schema = z.object({ /* shape */ });
+type FormData = z.infer<typeof schema>;
+
+function ExpenseForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
+  // ...
+}
+```
+
+Form validation runs on blur and on submit. Server-side validation errors (from Problem+JSON) are mapped to field-level errors after a failed submit.
+
+## 7. Error handling
+
+- **API errors**: `client.ts` throws `ApiError` with `status` and `problem` (parsed Problem+JSON). TanStack Query's `onError` callback handles per-mutation errors.
+- **Global 401 interceptor**: `client.ts` detects 401, clears token, triggers redirect.
+- **Toast notifications**: success toasts for mutations (e.g., "Expense added"), error toasts for failures.
+- **Inline form errors**: field-level, rendered below the input.
+- **Page-level errors**: if a query fails and the page has no data, show an error banner with retry button.
+
+## 8. Test strategy
 
 **Per slice:**
-- At least one **integration test** hitting the HTTP endpoint through `WebApplicationFactory`, covering the happy path.
-- At least one integration test per documented failure mode (validation, auth, not-found, concurrency).
-- **Pure unit tests** for any non-trivial logic (`BalanceCalculator`, `DebtSimplifier`, split-rounding) in `SplitBook.Domain.Tests`.
+- At least one **component test** (Vitest + React Testing Library) covering the happy path of the main component.
+- At least one test per documented failure mode (validation, empty state, error state).
+- **E2E test** (Playwright) for the golden-path user journey of the slice, running against a real API instance.
 
-**Invariants that must be asserted somewhere:**
-- Balances sum to 0 per group after any expense or settlement.
-- `DebtSimplifier` produces ≤ N−1 transfers for N members with non-zero balance.
-- Split-rounding: the sum of all split amounts equals the expense total, exactly, for every split method.
-- Idempotency: two `POST` calls with same `Idempotency-Key` within 24h return identical bodies and create only one row.
+**Test conventions:**
+- Component tests use MSW to mock API responses — no network calls.
+- E2E tests run against `VITE_API_URL` pointing to a real (or dockerized) SplitBook.Api instance.
+- Use `@testing-library/user-event` for realistic user interactions.
+- Assert on visible text and DOM structure, not on internal React state or implementation details.
 
-**Test DB:** use a unique SQLite file per test class (`$"Data Source={Guid}.db"`) or an in-memory shared connection — whichever is more reliable under xUnit parallelism.
+**E2E test environment:**
+- API runs on `http://localhost:5000` (configured via `.env.e2e`).
+- Playwright starts a fresh browser context per test (no shared state).
+- Tests clean up after themselves (delete created resources or use unique names).
 
-## 8. Definition of done (per slice)
+## 9. Definition of done (per slice)
 
-- All new/modified tests pass: `dotnet test` green.
-- `dotnet build --warnaserror` green.
-- New endpoints documented in this spec (update in place).
+- All tests pass: `pnpm test` green (Vitest) and `pnpm test:e2e` green (Playwright, if API available).
+- `pnpm build` produces a clean production bundle with no TypeScript errors.
+- `pnpm lint` passes (ESLint with TypeScript ESLint, no warnings).
+- The slice's screen is navigable and functional in the browser at `http://localhost:5173`.
 - LESSONS.md updated with any new lesson learned this slice (or explicitly "no new lessons").
 
-## 9. Open questions for the implementing model to decide
+## 10. Open questions for the implementing model to decide
 
-These are deliberately underspecified so the model exercises judgment — it should document its decision in code comments or a `DECISIONS.md`:
-
-1. MediatR vs hand-written handlers.
-2. How to express `RowVersion` in SQLite (concurrency token shape).
-3. Whether to use `Results.Problem(...)` helpers everywhere or a centralized error filter.
-4. Project reference boundaries: one project (`SplitBook.Api`) with folders, or split `SplitBook.Domain` into its own class library.
+1. **Toast library**: use `sonner` (lightweight, popular) or hand-roll a minimal toast with React state and CSS transitions?
+2. **Modal implementation**: use `@headlessui/react` Dialog or hand-roll with portal + overlay?
+3. **Currency formatting**: use `Intl.NumberFormat` directly or a thin wrapper in `lib/money.ts`?
+4. **Route-level code splitting**: use `React.lazy` + `Suspense` per route, or keep it simple with eager imports?
 
 The reviewer subagent should check these decisions are (a) made consciously, (b) consistent across slices.

@@ -1,0 +1,6 @@
+{
+  "name": "SplitBook",
+  "short_name": "SplitBook",
+  "start_url": "/",
+  "display": "standalone"
+}

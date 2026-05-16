@@ -36,3 +36,21 @@
 2026-04-25T13:05:51+02:00 reply=status -> telegram-status-sent (slice-10 fork resumed)
 2026-04-25T13:05:51+02:00 reply='/start' -> unknown
 2026-04-25T13:05:51+02:00 reply='👋' -> unknown
+2026-04-25 14:42:11 manual-commit-via-telegram sha=990de2f
+2026-04-25 14:50:32 resumed-via-telegram (after kill of 3462628)
+2026-04-25 15:12:03 autopilot-killed-stuck pid=3534667 + relaunched (subagent hung 9min on Explore test infrastructure)
+2026-04-25 15:16:48 autopilot-resume opencode (previous run pid 3560725 died after 80s)
+2026-04-25 15:35:51 autopilot-commit slice12 sha=e3f5400
+2026-04-25 15:36:03 autopilot-launch-slice13 (after slice 12 commit e3f5400)
+2026-04-25 15:49:52 autopilot-commit slice11 sha=af8b8d7
+2026-04-25 15:49:56 autopilot-launch-slice13
+2026-04-25 16:23:43 autopilot-commit slice13 sha=19be9ff (manual; runner died before slice-13.md)
+2026-04-25 16:37:35 autopilot-commit slice14 sha=e734bfb (manual; runner died before slice-14.md)
+2026-04-25 16:51:02 autopilot-commit slice13-md-backfill sha=e45a18a
+2026-04-25 17:06:09 autopilot-relaunch slice14-backfill (1 RED test, runner died mid-debug; not committing yet)
+2026-04-25 17:19:35 autopilot-commit slice14-md-backfill sha=fe44513
+2026-04-25 17:29:13 autopilot-commit slice15 sha=62e7e67 (manual; runner died before slice-15.md)
+2026-04-25 17:38:58 autopilot-commit slice15-md sha=ceecb05
+2026-04-25 17:58:12 autopilot-commit slice16 sha=47e1612 (manual; runner died at 97K context)
+2026-04-25 18:02:59 autopilot-commit slice16-md sha=5ffeca1
+2026-04-25 18:27:06 autopilot-commit slice17-FINAL sha=6f14035
