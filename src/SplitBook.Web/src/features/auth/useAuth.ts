@@ -1,9 +1,12 @@
+const TOKEN_KEY = 'splitbook_token';
+
 export function useAuth() {
-  return {
-    user: null,
-    isAuthenticated: false,
-    login: async () => {},
-    register: async () => {},
-    logout: () => {},
+  const token = localStorage.getItem(TOKEN_KEY);
+  const isAuthenticated = !!token;
+
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
   };
+
+  return { isAuthenticated, logout };
 }

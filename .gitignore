@@ -35,3 +35,8 @@ src/SplitBook.Web/coverage/
 # Slice session logs (harness/logs/*.md, harness/logs/frontend/*.md) are the
 # experiment deliverable and MUST stay tracked — the autopilot commits them.
 harness/logs/runs/
+node_modules/
+dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
