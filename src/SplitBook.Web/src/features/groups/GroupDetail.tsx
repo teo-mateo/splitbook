@@ -1,11 +1,38 @@
+import { useState } from 'react';
 import { z } from 'zod';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import { BalanceDtoSchema, GroupDetailDtoSchema, ListExpensesResponseSchema } from '../../api/types';
+import { AddMember } from './AddMember';
+import { RemoveMember } from './RemoveMember';
 
 export function GroupDetail() {
   const { id } = useParams();
+  const queryClient = useQueryClient();
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [removingMember, setRemovingMember] = useState<{ userId: string; displayName: string } | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) =>
+      apiRequest(z.void(), `/groups/${id}/members/${userId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', id] });
+      queryClient.invalidateQueries({ queryKey: ['balances', id] });
+      setRemovingMember(null);
+    },
+    onError: () => {
+      setRemoveError('Something went wrong. Please try again.');
+      setRemovingMember(null);
+    },
+  });
+
+  const handleRemove = (userId: string) => {
+    removeMutation.mutate(userId);
+  };
 
   const { data: group, isLoading, error, refetch } = useQuery({
     queryKey: ['group', id],
@@ -101,11 +128,32 @@ export function GroupDetail() {
         <div className="mx-auto max-w-2xl px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
-            <span className="text-sm text-gray-500">{group.currency}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">{group.currency}</span>
+              <button
+                type="button"
+                onClick={() => setShowAddMember(true)}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Add member
+              </button>
+            </div>
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-6">
+        {removeError && (
+          <div className="mb-4 rounded-lg bg-red-50 p-4">
+            <p className="text-sm text-red-600">{removeError}</p>
+            <button
+              type="button"
+              onClick={() => setRemoveError(null)}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <section className="mb-6">
           <h2 className="mb-2 text-lg font-semibold text-gray-900">Members</h2>
           {group.members.length === 0 ? (
@@ -118,7 +166,20 @@ export function GroupDetail() {
                   <li key={member.userId} className="rounded-lg bg-white px-4 py-3 shadow-sm">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-gray-900">{member.displayName}</span>
-                      <span className={balanceColor(minor)}>{formatBalance(minor)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className={balanceColor(minor)}>{formatBalance(minor)}</span>
+                        {group.members.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRemovingMember({ userId: member.userId, displayName: member.displayName })
+                            }
+                            className="text-sm text-red-600 hover:text-red-800"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 );
@@ -158,6 +219,16 @@ export function GroupDetail() {
           )}
         </section>
       </main>
+      {showAddMember && <AddMember onClose={() => setShowAddMember(false)} />}
+      {removingMember && (
+        <RemoveMember
+          memberName={removingMember.displayName}
+          groupName={group.name}
+          onConfirm={() => handleRemove(removingMember.userId)}
+          onCancel={() => setRemovingMember(null)}
+          isPending={removeMutation.isPending}
+        />
+      )}
     </div>
   );
 }
