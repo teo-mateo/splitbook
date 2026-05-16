@@ -7,7 +7,7 @@ export const LoginRequestSchema = z.object({
 
 export const LoginResponseSchema = z.object({
   accessToken: z.string(),
-  expiresAt: z.string().datetime(),
+  expiresAt: z.string(),
 });
 
 export const RegisterRequestSchema = z.object({
@@ -26,7 +26,7 @@ export const GroupDtoSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   currency: z.string(),
-  createdAt: z.string().datetime(),
+  createdAt: z.string(),
 });
 
 export const ListGroupsResponseSchema = z.array(GroupDtoSchema);
