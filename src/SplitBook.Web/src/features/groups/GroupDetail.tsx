@@ -1,18 +1,37 @@
 import { useState } from 'react';
 import { z } from 'zod';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import { BalanceDtoSchema, GroupDetailDtoSchema, ListExpensesResponseSchema } from '../../api/types';
 import { AddMember } from './AddMember';
 import { RemoveMember } from './RemoveMember';
+import { ArchiveGroup } from './ArchiveGroup';
 
 export function GroupDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const [removingMember, setRemovingMember] = useState<{ userId: string; displayName: string } | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const archiveMutation = useMutation({
+    mutationFn: () =>
+      apiRequest(z.void(), `/groups/${id}/archive`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      setShowArchive(false);
+      navigate('/groups');
+    },
+    onError: () => {
+      setArchiveError('Something went wrong. Please try again.');
+      setShowArchive(false);
+    },
+  });
 
   const removeMutation = useMutation({
     mutationFn: (userId: string) =>
@@ -137,6 +156,13 @@ export function GroupDetail() {
               >
                 Add member
               </button>
+              <button
+                type="button"
+                onClick={() => setShowArchive(true)}
+                className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                Archive
+              </button>
             </div>
           </div>
         </div>
@@ -148,6 +174,18 @@ export function GroupDetail() {
             <button
               type="button"
               onClick={() => setRemoveError(null)}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {archiveError && (
+          <div className="mb-4 rounded-lg bg-red-50 p-4">
+            <p className="text-sm text-red-600">{archiveError}</p>
+            <button
+              type="button"
+              onClick={() => setArchiveError(null)}
               className="mt-2 text-sm text-red-600 underline hover:text-red-800"
             >
               Dismiss
@@ -220,6 +258,14 @@ export function GroupDetail() {
         </section>
       </main>
       {showAddMember && <AddMember onClose={() => setShowAddMember(false)} />}
+      {showArchive && (
+        <ArchiveGroup
+          groupName={group.name}
+          onClose={() => setShowArchive(false)}
+          onConfirm={() => archiveMutation.mutate()}
+          isPending={archiveMutation.isPending}
+        />
+      )}
       {removingMember && (
         <RemoveMember
           memberName={removingMember.displayName}

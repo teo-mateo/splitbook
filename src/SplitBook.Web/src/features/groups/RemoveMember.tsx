@@ -12,9 +12,9 @@ export function RemoveMember({
   isPending: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-        <h2 className="mb-2 text-xl font-bold">Remove Member</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="remove-member-dialog-title">
+      <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl" role="document">
+        <h2 id="remove-member-dialog-title" className="mb-2 text-xl font-bold">Remove Member</h2>
         <p className="mb-4 text-gray-700">
           Remove {memberName} from {groupName}?
         </p>
