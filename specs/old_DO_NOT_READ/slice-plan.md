@@ -1,0 +1,40 @@
+# Slice Plan — Execution Order
+
+Each slice is a self-contained TDD cycle. Do not advance until the current slice's Definition of Done (see technical-spec §8) is met.
+
+## Sizing rule
+
+**One endpoint per slice. At most two, and only if they are tightly coupled** (share infra that isn't otherwise justified, e.g. `Register` + `Login` share JWT setup; `add member` + `remove member` share membership lifecycle). Bigger slices burn the model — it spirals in deliberation, tests get written in huge batches with no feedback, and a single wrong guess contaminates many files. Small slices give per-endpoint red→green cycles and commit-worthy checkpoints.
+
+If you feel a slice is growing to three endpoints, split it.
+
+## Slices
+
+| # | Slice | Endpoint(s) / Unit | DoD signal |
+|---|-------|---------------------|------------|
+| 0 | **Bootstrap** — solution, Api project, Tests project, `GET /health`, CI script | `GET /health` | `/health` returns 200 in an integration test; `dotnet build -warnaserror` clean |
+| 1 | **Auth — Register + Login** (two coupled: share JWT infra, DbContext, password hashing) | `POST /auth/register`, `POST /auth/login` | Can register then login and receive a JWT; protected endpoint returns 401 without token |
+| 2 | **Groups — Create** | `POST /groups` | Creator becomes a member; response includes id + currency |
+| 3 | **Groups — List my groups** | `GET /groups` | Caller sees groups they belong to, not others' |
+| 4 | **Groups — Detail** | `GET /groups/{id}` | Returns members; 404 when caller is not a member (not 403 — see technical-spec §5) |
+| 5 | **Groups — Add + remove member** (two coupled: share membership lifecycle) | `POST /groups/{id}/members`, `DELETE /groups/{id}/members/{userId}` | Lookup by email on add; remove fails if non-zero balance exists (stub — made real in slice 11) |
+| 6 | **Groups — Archive** | `POST /groups/{id}/archive` | Always succeeds (archive is escape hatch — D-06) |
+| 7 | **Expenses — Add (Equal split only)** | `POST /groups/{groupId}/expenses` with `splitMethod: "Equal"` | €60 equal split between 2 participants stores 2 `ExpenseSplit` rows of €30, sum = total, idempotency works |
+| 8 | **Expenses — Exact split** (extends slice 7, same endpoint) | `splitMethod: "Exact"` validation | Sum-of-amounts must equal total or 400 |
+| 9 | **Expenses — List** | `GET /groups/{groupId}/expenses` | Paging (`skip`/`take`), date filter |
+| 10 | **Expenses — Percentage + Shares** (two coupled: both are proportional) | `splitMethod: "Percentage"`, `splitMethod: "Shares"` validation | % must sum to 100; shares ≥ 1 each |
+| 11 | **Expenses — Edit** (introduces `RowVersion` concurrency) | `PUT /groups/{groupId}/expenses/{id}` | Stale `If-Match` returns 412 |
+| 12 | **Expenses — Delete** | `DELETE /groups/{groupId}/expenses/{id}` | Soft delete — row remains with `DeletedAt`, excluded from queries |
+| 13 | **Balances** — `BalanceCalculator` + endpoint | `GET /groups/{groupId}/balances` | Invariant: sum of balances = 0 for any expense set |
+| 14 | **Settlements — Record** | `POST /groups/{groupId}/settlements` | Payer→payee must both be group members; amount moves balances |
+| 15 | **Settlements — List** | `GET /groups/{groupId}/settlements` | Ordered newest first |
+| 16 | **Simplified debts** — `DebtSimplifier` + endpoint | `GET /groups/{groupId}/simplified-debts` | Produces ≤ N−1 transfers for N non-zero members; full product-spec §8 e2e passes |
+| 17 | **User summary** | `GET /users/me/summary` | Sum across all groups; matches per-group balances |
+
+## Notes for the implementer
+
+- **Do not skip ahead.** Do not add a `Settlements` table in slice 2 because you "know it's coming." Each slice introduces only what its tests require.
+- **Red first.** Start each slice by writing integration tests that fail because the endpoint 404s. The test-writer subagent is responsible for this. Confirm red by quoting `dotnet test` output.
+- **One open question per slice, max.** If a slice surfaces more than one architectural decision, stop and escalate to the reviewer subagent rather than guessing.
+- **Refactor is part of the slice.** The slice is not done until the code you just wrote is clean — dead code, placeholder names, duplicated mapping, method bodies that never execute, etc., all go before DoD.
+- **The definition of "done" is strict.** If you find yourself thinking "we'll clean that up in a later slice," either make that an explicit follow-up noted in the slice log OR clean it up now. Both are acceptable; silent deferral is not.
