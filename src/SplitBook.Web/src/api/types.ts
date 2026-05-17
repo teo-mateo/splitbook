@@ -90,4 +90,23 @@ export type GroupDetailDto = z.infer<typeof GroupDetailDtoSchema>;
 export type BalanceDto = z.infer<typeof BalanceDtoSchema>;
 export type ExpenseSplitDto = z.infer<typeof ExpenseSplitDtoSchema>;
 export type ExpenseDto = z.infer<typeof ExpenseDtoSchema>;
+export const ExpenseSplitRequestSchema = z.object({
+  userId: z.string().uuid(),
+  amountMinor: z.number().nullable(),
+  percentage: z.number().nullable(),
+  shares: z.number().nullable(),
+});
+
+export const AddExpenseRequestSchema = z.object({
+  payerUserId: z.string().uuid(),
+  amountMinor: z.number(),
+  currency: z.string().nullable(),
+  description: z.string().nullable(),
+  occurredOn: z.string(),
+  splitMethod: z.string().nullable(),
+  splits: z.array(ExpenseSplitRequestSchema).nullable(),
+});
+
 export type ListExpensesResponse = z.infer<typeof ListExpensesResponseSchema>;
+export type ExpenseSplitRequest = z.infer<typeof ExpenseSplitRequestSchema>;
+export type AddExpenseRequest = z.infer<typeof AddExpenseRequestSchema>;
