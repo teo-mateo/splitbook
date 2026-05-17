@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server } from '../../../test/setup';
 import { GroupDetail } from './GroupDetail';
+import App from '../../App';
 
 describe('GroupDetail', () => {
   beforeEach(() => {
@@ -566,6 +567,105 @@ describe('GroupDetail', () => {
     expect(screen.queryByText('Retry')).toBeNull();
   });
 
+  test('renders an "Add expense" button in the Expenses section', async () => {
+    const testGroupId = 'ad111111-1111-1111-1111-111111111111';
+    const aliceId = '11111111-1111-1111-1111-111111111111';
+
+    server.use(
+      http.get('http://localhost:5000/groups/:id', () => {
+        return HttpResponse.json({
+          id: testGroupId,
+          name: 'Lisbon Trip',
+          currency: 'EUR',
+          createdAt: '2024-01-15T10:00:00Z',
+          archivedAt: null,
+          members: [
+            { userId: aliceId, displayName: 'Alice' },
+          ],
+        });
+      }),
+      http.get('http://localhost:5000/groups/:id/balances', () => {
+        return HttpResponse.json([]);
+      }),
+      http.get('http://localhost:5000/groups/:id/expenses', () => {
+        return HttpResponse.json({ items: [], total: 0 });
+      }),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/groups/${testGroupId}`]}>
+          <Routes>
+            <Route path="/groups/:id" element={<GroupDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await expect(screen.findByText('Lisbon Trip')).resolves.toBeVisible();
+    await expect(screen.findByRole('button', { name: /add expense/i })).resolves.toBeVisible();
+  });
+
+  test('clicking "Add expense" navigates to /groups/<id>/expenses/new with the correct group id', async () => {
+    const testGroupId = 'ad222222-2222-2222-2222-222222222222';
+    const aliceId = '11111111-1111-1111-1111-111111111111';
+    const user = userEvent.setup();
+
+    server.use(
+      http.get('http://localhost:5000/groups/:id', () => {
+        return HttpResponse.json({
+          id: testGroupId,
+          name: 'Lisbon Trip',
+          currency: 'EUR',
+          createdAt: '2024-01-15T10:00:00Z',
+          archivedAt: null,
+          members: [
+            { userId: aliceId, displayName: 'Alice' },
+          ],
+        });
+      }),
+      http.get('http://localhost:5000/groups/:id/balances', () => {
+        return HttpResponse.json([]);
+      }),
+      http.get('http://localhost:5000/groups/:id/expenses', () => {
+        return HttpResponse.json({ items: [], total: 0 });
+      }),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/groups/${testGroupId}`]}>
+          <Routes>
+            <Route path="/groups/:id" element={<GroupDetail />} />
+            <Route path="/groups/:id/expenses/new" element={<div data-testid="expense-form-target">Expense Form Placeholder</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await expect(screen.findByText('Lisbon Trip')).resolves.toBeVisible();
+
+    const addExpenseBtn = await screen.findByRole('button', { name: /add expense/i });
+    await user.click(addExpenseBtn);
+
+    // After navigation, the expense form route should be rendered
+    await expect(screen.findByTestId('expense-form-target')).resolves.toBeVisible();
+  });
+
   test('shows generic error message with Retry button on non-404 error, and Retry re-fires the request', async () => {
     const testGroupId = 'a1111111-1111-1111-1111-111111111111';
     const user = userEvent.setup();
@@ -615,5 +715,176 @@ describe('GroupDetail', () => {
     await waitFor(() => {
       expect(requestCount).toBe(2);
     });
+  });
+
+  test('AuthGuard blocks unauthenticated access to the expense form and redirects to /login', async () => {
+    // Explicitly remove token so AuthGuard redirects
+    localStorage.removeItem('splitbook_token');
+
+    const testGroupId = 'ad444444-4444-4444-4444-444444444444';
+
+    // Navigate to the expense form URL before rendering
+    window.history.pushState({}, '', `/groups/${testGroupId}/expenses/new`);
+    render(<App />);
+
+    // AuthGuard should redirect to /login
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/login');
+    });
+  });
+
+  test('round-trip: submit expense and see it land on Group Detail expense feed', async () => {
+    const user = userEvent.setup();
+    const testGroupId = 'ad555555-5555-5555-5555-555555555555';
+    const aliceId = '11111111-1111-1111-1111-111111111111';
+    const bobId = '22222222-2222-2222-2222-222222222222';
+
+    // Mutable state: expenses start empty; POST handler pushes the created expense
+    const createdExpenses: unknown[] = [];
+
+    server.use(
+      http.get('http://localhost:5000/groups/:id', () => {
+        return HttpResponse.json({
+          id: testGroupId,
+          name: 'Lisbon Trip',
+          currency: 'EUR',
+          createdAt: '2024-01-15T10:00:00Z',
+          archivedAt: null,
+          members: [
+            { userId: aliceId, displayName: 'Alice' },
+            { userId: bobId, displayName: 'Bob' },
+          ],
+        });
+      }),
+      http.get('http://localhost:5000/groups/:id/balances', () => {
+        return HttpResponse.json([]);
+      }),
+      http.get('http://localhost:5000/groups/:id/expenses', () => {
+        return HttpResponse.json({ items: createdExpenses, total: createdExpenses.length });
+      }),
+      http.post('http://localhost:5000/groups/:groupId/expenses', async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        // Echo back a valid ExpenseDto (splits.amountMinor must be z.number(), not nullable)
+        const newExpense = {
+          id: 'e5555555-5555-5555-5555-555555555555',
+          groupId: testGroupId,
+          payerUserId: body.payerUserId,
+          amountMinor: body.amountMinor,
+          currency: 'EUR',
+          description: body.description,
+          occurredOn: body.occurredOn ?? '2024-03-10',
+          splitMethod: body.splitMethod,
+          splits: (body.splits as Array<Record<string, unknown>> ?? []).map((s) => ({
+            userId: s.userId,
+            amountMinor: s.amountMinor ?? 0,
+          })),
+          createdAt: '2024-03-10T20:00:00Z',
+          version: 1,
+        };
+        createdExpenses.push(newExpense);
+        return HttpResponse.json(newExpense, { status: 201 });
+      }),
+    );
+
+    window.history.pushState({}, '', `/groups/${testGroupId}`);
+    render(<App />);
+
+    // 1. Group Detail loads — wait for group name
+    await expect(screen.findByText('Lisbon Trip')).resolves.toBeVisible();
+
+    // 2. Click "Add expense" button
+    const addExpenseBtn = await screen.findByRole('button', { name: /add expense/i });
+    await user.click(addExpenseBtn);
+
+    // 3. ExpenseForm renders — wait for heading
+    await expect(
+      screen.findByRole('heading', { name: 'Add Expense' }),
+    ).resolves.toBeVisible();
+
+    // 4. Fill description
+    const descInput = screen.getByLabelText(/description/i, { selector: 'input' });
+    await user.type(descInput, 'Dinner');
+
+    // 5. Fill amount (clear default, type 60)
+    const amountInput = screen.getByRole('spinbutton');
+    await user.clear(amountInput);
+    await user.type(amountInput, '60');
+
+    // 6. Select payer — Alice (auto-checks her as participant)
+    const payerSelect = screen.getByLabelText(/payer/i, { selector: 'select' });
+    await user.selectOptions(payerSelect, aliceId);
+
+    // 7. Submit
+    const submitButton = screen.getByRole('button', { name: 'Add Expense' });
+    await user.click(submitButton);
+
+    // 8. Wait for navigation back to Group Detail + post-mutation refetch
+    //    The new expense "Dinner" should appear in the expense feed
+    await waitFor(
+      () => {
+        expect(screen.getByText('Dinner')).toBeVisible();
+      },
+      { timeout: 10000 },
+    );
+  }, 15000);
+
+  test('full reachability: from /groups click card then "Add expense" reaches ExpenseForm through real <App>', async () => {
+    const user = userEvent.setup();
+    const testGroupId = 'ad333333-3333-3333-3333-333333333333';
+    const aliceId = '11111111-1111-1111-1111-111111111111';
+
+    server.use(
+      // GroupsList queries this
+      http.get('http://localhost:5000/groups', () => {
+        return HttpResponse.json([
+          {
+            id: testGroupId,
+            name: 'Lisbon Trip',
+            currency: 'EUR',
+            createdAt: '2024-01-15T10:00:00Z',
+          },
+        ]);
+      }),
+      // GroupDetail and ExpenseForm both query this
+      http.get('http://localhost:5000/groups/:id', () => {
+        return HttpResponse.json({
+          id: testGroupId,
+          name: 'Lisbon Trip',
+          currency: 'EUR',
+          createdAt: '2024-01-15T10:00:00Z',
+          archivedAt: null,
+          members: [
+            { userId: aliceId, displayName: 'Alice' },
+          ],
+        });
+      }),
+      http.get('http://localhost:5000/groups/:id/balances', () => {
+        return HttpResponse.json([]);
+      }),
+      http.get('http://localhost:5000/groups/:id/expenses', () => {
+        return HttpResponse.json({ items: [], total: 0 });
+      }),
+    );
+
+    // Start at /groups (the post-auth landing page)
+    window.history.pushState({}, '', '/groups');
+    render(<App />);
+
+    // 1. GroupsList loads — find the group card link by its visible name
+    const groupCard = await screen.findByRole('link', { name: /Lisbon Trip/i });
+    await user.click(groupCard);
+
+    // 2. GroupDetail loads — find the "Add expense" button
+    const addExpenseBtn = await screen.findByRole('button', { name: /add expense/i });
+    await user.click(addExpenseBtn);
+
+    // 3. ExpenseForm renders — assert the heading appears
+    // App.tsx QueryClient retries by default; give retries time to exhaust.
+    await waitFor(
+      () => {
+        expect(screen.getByRole('heading', { name: 'Add Expense' })).toBeVisible();
+      },
+      { timeout: 10000 },
+    );
   });
 });

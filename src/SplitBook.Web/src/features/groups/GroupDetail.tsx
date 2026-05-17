@@ -226,7 +226,16 @@ export function GroupDetail() {
           )}
         </section>
         <section className="mb-6">
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">Expenses</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Expenses</h2>
+            <button
+              type="button"
+              onClick={() => navigate(`/groups/${id}/expenses/new`)}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Add expense
+            </button>
+          </div>
           {expenses.length === 0 ? (
             <p className="text-gray-500">No expenses yet</p>
           ) : (
