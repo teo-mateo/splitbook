@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
-import { BalanceDtoSchema, GroupDetailDtoSchema, ListExpensesResponseSchema } from '../../api/types';
+import { BalanceDtoSchema, GroupDetailDtoSchema } from '../../api/types';
 import { AddMember } from './AddMember';
 import { RemoveMember } from './RemoveMember';
 import { ArchiveGroup } from './ArchiveGroup';
+import { ExpenseList } from '../expenses/ExpenseList';
 
 export function GroupDetail() {
   const { id } = useParams();
@@ -61,12 +62,6 @@ export function GroupDetail() {
   const { data: balances } = useQuery({
     queryKey: ['balances', id],
     queryFn: () => apiRequest(z.array(BalanceDtoSchema), `/groups/${id}/balances`),
-    enabled: !!group,
-  });
-
-  const { data: expensesData } = useQuery({
-    queryKey: ['expenses', id],
-    queryFn: () => apiRequest(ListExpensesResponseSchema, `/groups/${id}/expenses`),
     enabled: !!group,
   });
 
@@ -128,18 +123,6 @@ export function GroupDetail() {
     if (minorUnits < 0) return 'text-red-600';
     return 'text-gray-500';
   };
-
-  const memberNameMap = new Map(
-    group.members.map((m) => [m.userId, m.displayName]),
-  );
-
-  const formatExpenseAmount = (minorUnits: number): string => {
-    const major = minorUnits / 100;
-    const symbol = group.currency === 'EUR' ? '€' : group.currency;
-    return `${symbol}${major.toFixed(2)}`;
-  };
-
-  const expenses = expensesData?.items ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -236,34 +219,11 @@ export function GroupDetail() {
               Add expense
             </button>
           </div>
-          {expenses.length === 0 ? (
-            <p className="text-gray-500">No expenses yet</p>
-          ) : (
-            <ul className="space-y-2">
-              {expenses.map((expense) => {
-                const payerName = memberNameMap.get(expense.payerUserId) ?? 'Unknown';
-                const participantCount = expense.splits?.length ?? 0;
-                return (
-                  <li key={expense.id} className="rounded-lg bg-white px-4 py-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">{expense.description}</p>
-                        <p className="text-sm text-gray-500">
-                          <span>{payerName}</span>
-                          {' paid '}
-                          <span>{formatExpenseAmount(expense.amountMinor)}</span>
-                          {' · '}
-                          <span>{expense.occurredOn}</span>
-                          {' · '}
-                          <span>{participantCount} people</span>
-                        </p>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <ExpenseList
+            groupId={id ?? ''}
+            currency={group.currency}
+            members={group.members}
+          />
         </section>
       </main>
       {showAddMember && <AddMember onClose={() => setShowAddMember(false)} />}
