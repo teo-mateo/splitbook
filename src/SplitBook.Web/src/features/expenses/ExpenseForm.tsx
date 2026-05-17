@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiRequest } from '../../api/client';
 import { AddExpenseRequestSchema, ExpenseDtoSchema, GroupDetailDtoSchema } from '../../api/types';
-import { toMinorUnits } from '../../lib/money';
+import { toMinorUnits, formatCurrency } from '../../lib/money';
 
 const today = new Date().toISOString().split('T')[0];
 
@@ -28,6 +28,9 @@ export function ExpenseForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [splitMethod, setSplitMethod] = useState<'Equal' | 'Exact'>('Equal');
+  const [participantAmounts, setParticipantAmounts] = useState<Record<string, string>>({});
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   const { data: group, isLoading, error, refetch } = useQuery({
     queryKey: ['group', id],
@@ -101,7 +104,20 @@ export function ExpenseForm() {
 
   const onSubmit = handleSubmit(async (data) => {
     setServerError(null);
+    setSplitError(null);
     if (!group) return;
+
+    // Validate Exact split amounts sum to total
+    if (splitMethod === 'Exact') {
+      const participantSum = Object.values(participantAmounts).reduce(
+        (sum, v) => sum + (Number(v) || 0),
+        0,
+      );
+      if (Math.abs(participantSum - Number(data.amount)) > 0.001) {
+        setSplitError('Participant amounts must equal the total amount');
+        return;
+      }
+    }
 
     const amountMinor = toMinorUnits(Number(data.amount));
 
@@ -111,10 +127,12 @@ export function ExpenseForm() {
       currency: group.currency,
       description: data.description,
       occurredOn: data.occurredOn,
-      splitMethod: 'Equal',
+      splitMethod,
       splits: data.participantIds.map((userId) => ({
         userId,
-        amountMinor: null,
+        amountMinor: splitMethod === 'Exact'
+          ? toMinorUnits(Number(participantAmounts[userId]) || 0)
+          : null,
         percentage: null,
         shares: null,
       })),
@@ -271,15 +289,23 @@ export function ExpenseForm() {
             <div className="flex rounded border overflow-hidden">
               <button
                 type="button"
-                className="flex-1 px-4 py-2 text-sm font-medium bg-blue-600 text-white"
-                disabled
+                onClick={() => setSplitMethod('Equal')}
+                className={`flex-1 px-4 py-2 text-sm font-medium ${
+                  splitMethod === 'Equal'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
                 Equal
               </button>
               <button
                 type="button"
-                className="flex-1 px-4 py-2 text-sm font-medium bg-gray-100 text-gray-400"
-                disabled
+                onClick={() => setSplitMethod('Exact')}
+                className={`flex-1 px-4 py-2 text-sm font-medium ${
+                  splitMethod === 'Exact'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
                 Exact
               </button>
@@ -304,34 +330,69 @@ export function ExpenseForm() {
           <div>
             <span className="mb-2 block text-sm font-medium">Participants</span>
             <div className="space-y-2">
-              {group.members.map((member) => (
-                <label
-                  key={member.userId}
-                  className="flex items-center gap-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={participantIds.includes(member.userId)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setValue(
-                          'participantIds',
-                          [...participantIds, member.userId],
-                          { shouldValidate: true },
-                        );
-                      } else {
-                        setValue(
-                          'participantIds',
-                          participantIds.filter((id) => id !== member.userId),
-                          { shouldValidate: true },
-                        );
-                      }
-                    }}
-                  />
-                  <span className="text-sm">{member.displayName}</span>
-                </label>
-              ))}
+              {group.members.map((member) => {
+                const isChecked = participantIds.includes(member.userId);
+                return (
+                  <label
+                    key={member.userId}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setValue(
+                            'participantIds',
+                            [...participantIds, member.userId],
+                            { shouldValidate: true },
+                          );
+                        } else {
+                          setValue(
+                            'participantIds',
+                            participantIds.filter((id) => id !== member.userId),
+                            { shouldValidate: true },
+                          );
+                        }
+                      }}
+                    />
+                    <span className="text-sm">{member.displayName}</span>
+                    {splitMethod === 'Exact' && isChecked && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        id={`exact-amount-${member.userId}`}
+                        className="w-24 rounded border px-2 py-1 text-sm"
+                        value={participantAmounts[member.userId] ?? ''}
+                        onChange={(e) => {
+                          setParticipantAmounts((prev) => ({
+                            ...prev,
+                            [member.userId]: e.target.value,
+                          }));
+                        }}
+                      />
+                    )}
+                  </label>
+                );
+              })}
             </div>
+            {splitMethod === 'Exact' && (
+              <p className="mt-2 text-sm font-medium text-gray-700">
+                Total: {formatCurrency(
+                  toMinorUnits(
+                    Object.values(participantAmounts).reduce(
+                      (sum, v) => sum + (Number(v) || 0),
+                      0,
+                    ),
+                  ),
+                  group.currency,
+                )}
+              </p>
+            )}
+            {splitError && (
+              <p className="mt-1 text-sm text-red-600">{splitError}</p>
+            )}
             {errors.participantIds && (
               <p className="mt-1 text-sm text-red-600">{errors.participantIds.message}</p>
             )}
